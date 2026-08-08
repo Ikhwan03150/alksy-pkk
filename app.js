@@ -130,7 +130,43 @@ document.addEventListener('DOMContentLoaded', () => {
             doLogout();
         });
     }
+
+    initPasswordToggle();
 });
+
+// --- Password Eye Toggle Handler ---
+function initPasswordToggle() {
+    document.addEventListener('click', (e) => {
+        const toggleBtn = e.target.closest('.btn-toggle-password');
+        if (!toggleBtn) return;
+
+        let input = null;
+        const targetId = toggleBtn.getAttribute('data-target');
+        if (targetId) {
+            input = document.getElementById(targetId);
+        } else {
+            const parent = toggleBtn.closest('.input-group, .password-input-group, .form-group');
+            if (parent) input = parent.querySelector('input');
+        }
+
+        if (input) {
+            const icon = toggleBtn.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                if (icon) {
+                    icon.classList.remove('fa-eye');
+                    icon.classList.add('fa-eye-slash');
+                }
+            } else {
+                input.type = 'password';
+                if (icon) {
+                    icon.classList.remove('fa-eye-slash');
+                    icon.classList.add('fa-eye');
+                }
+            }
+        }
+    });
+}
 
 // --- Auth Functions ---
 function checkSession() {
