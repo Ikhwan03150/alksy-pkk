@@ -3593,7 +3593,18 @@ window.duplicateGroupSki = async (encodedKey) => {
     if (!allUnits.length) {
         allUnits = ['SD', 'SMP', 'SMA', 'TK', 'HRD', 'GA', 'FA', 'Yayasan'];
     }
-    if (!isAdmin) {
+
+    if (currentUser.level === 'General Manager') {
+        const isPendidikan = currentUser.jabatan && currentUser.jabatan.toLowerCase().includes('pendidikan');
+        const isOperasional = currentUser.jabatan && currentUser.jabatan.toLowerCase().includes('operasional');
+        if (isPendidikan) {
+            allUnits = allUnits.filter(u => ['tk', 'sd', 'smp', 'sma'].includes((u || '').toLowerCase().trim()));
+            if (!allUnits.length) allUnits = ['TK', 'SD', 'SMP', 'SMA'];
+        } else if (isOperasional) {
+            allUnits = allUnits.filter(u => ['fa', 'ga', 'hrd'].includes((u || '').toLowerCase().trim()));
+            if (!allUnits.length) allUnits = ['FA', 'GA', 'HRD'];
+        }
+    } else if (!isAdmin) {
         allUnits = [currentUser.unit];
     }
 
@@ -3698,22 +3709,32 @@ window.duplicateGroupSki = async (encodedKey) => {
         if (!dupLevel) return;
         const selectedU = dupUnit ? dupUnit.value : '';
 
-        let filteredUsers = _skiUserData || [];
-        if (selectedU) filteredUsers = filteredUsers.filter(u => u.unit === selectedU);
+        let allowedLevels = [];
+        if (currentUser.level === 'General Manager') {
+            // General Manager khusus hanya mengelola SKI untuk level Manager
+            allowedLevels = ['Manager'];
+        } else {
+            let filteredUsers = _skiUserData || [];
+            if (selectedU) filteredUsers = filteredUsers.filter(u => u.unit === selectedU);
 
-        let levels = [...new Set(filteredUsers.map(u => u.level).filter(Boolean))];
-        if (levels.length === 0) {
-            levels = [...new Set((_skiUserData || []).map(u => u.level).filter(Boolean))];
-        }
-        if (levels.length === 0) {
-            levels = defaultLevels;
-        }
+            let levels = [...new Set(filteredUsers.map(u => u.level).filter(Boolean))];
+            if (levels.length === 0) {
+                levels = [...new Set((_skiUserData || []).map(u => u.level).filter(Boolean))];
+            }
+            if (levels.length === 0) {
+                levels = defaultLevels;
+            }
 
-        levels.sort((a, b) => levelOrder.indexOf(a) - levelOrder.indexOf(b));
-        let allowedLevels = levels.filter(l => !hiddenLevels.includes(l.toLowerCase().trim()));
+            levels.sort((a, b) => levelOrder.indexOf(a) - levelOrder.indexOf(b));
+            allowedLevels = levels.filter(l => !hiddenLevels.includes(l.toLowerCase().trim()));
+        }
 
         dupLevel.innerHTML = '<option value="">-- Pilih Level --</option>' +
             allowedLevels.map(l => `<option value="${l}">${l}</option>`).join('');
+
+        if (allowedLevels.length === 1) {
+            dupLevel.value = allowedLevels[0];
+        }
 
         updateDupJabatanDropdown();
     };
