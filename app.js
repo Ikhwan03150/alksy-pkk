@@ -2952,26 +2952,23 @@ async function initDaftarSki(forceRefresh = false) {
                             `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:3px 10px; border-radius:12px; font-weight:700; font-size:0.78rem; display:inline-flex; align-items:center; gap:4px;"><i class="fas fa-clock"></i> ${roundedBobot}% (Draf)</span>`
                         }
                     </td>
-                    <td style="text-align:center;">
-                        ${!canEditGroup ? `
-                            <div style="display:flex; justify-content:center;">
-                                <button class="btn-outline" style="padding:4px 12px; font-size:0.78rem; border-color:#3b82f6; color:#1d4ed8;" onclick="viewGroupSki('${encodeURIComponent(g.key)}')">
-                                    <i class="fas fa-eye"></i> Lihat
-                                </button>
-                            </div>
-                        ` : `
-                            <div style="display:flex; justify-content:center; gap:6px;">
-                                <button class="btn-outline" style="padding:4px 10px; font-size:0.78rem;" onclick="editGroupSki('${encodeURIComponent(g.key)}')">
+                    <td style="text-align:center; white-space:nowrap;">
+                        <div style="display:inline-flex; align-items:center; justify-content:center; gap:4px;">
+                            <button style="background:#f0f9ff; color:#0369a1; border:1px solid #bae6fd; padding:4px 8px; border-radius:6px; font-weight:600; font-size:0.75rem; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" onclick="viewGroupSki('${encodeURIComponent(g.key)}')" title="Preview / Lihat SKI Jabatan Ini">
+                                <i class="fas fa-eye"></i> Lihat
+                            </button>
+                            ${canEditGroup ? `
+                                <button style="background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; padding:4px 8px; border-radius:6px; font-weight:600; font-size:0.75rem; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" onclick="editGroupSki('${encodeURIComponent(g.key)}')" title="Edit Template SKI">
                                     <i class="fas fa-edit"></i> Edit
                                 </button>
-                                <button class="btn-outline" style="padding:4px 10px; font-size:0.78rem; border-color:#2563eb; color:#1d4ed8; background:#eff6ff;" onclick="duplicateGroupSki('${encodeURIComponent(g.key)}')" title="Duplikat Template SKI Ini">
-                                    <i class="fas fa-copy"></i> Duplikat
+                                <button style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; width:28px; height:28px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" onclick="duplicateGroupSki('${encodeURIComponent(g.key)}')" title="Duplikat Template SKI Ini">
+                                    <i class="fas fa-copy" style="font-size:0.75rem;"></i>
                                 </button>
-                                <button style="background:#ef4444; color:white; border:none; width:30px; height:30px; border-radius:6px; cursor:pointer;" onclick="deleteGroupSki('${encodeURIComponent(g.key)}')" title="Hapus Template Jabatan Ini">
-                                    <i class="fas fa-trash" style="font-size:0.78rem;"></i>
+                                <button style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; width:28px; height:28px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" onclick="deleteGroupSki('${encodeURIComponent(g.key)}')" title="Hapus Template Jabatan Ini">
+                                    <i class="fas fa-trash" style="font-size:0.75rem;"></i>
                                 </button>
-                            </div>
-                        `}
+                            ` : ''}
+                        </div>
                     </td>
                 </tr>
             `;
@@ -2995,6 +2992,8 @@ async function initDaftarSki(forceRefresh = false) {
         };
     }
 }
+
+
 
 window.updateModalEditTotalBobot = () => {
     const tbody = document.getElementById('tbody-modal-edit-rows');
@@ -3298,9 +3297,22 @@ window.viewGroupSki = (encodedKey) => {
                         `;
                     }).join('')}
                 </tbody>
+                <tfoot style="background:#f8fafc; font-weight:700; border-top:2px solid #cbd5e1;">
+                    <tr>
+                        <td colspan="4" style="text-align:right; padding:10px 12px; color:#334155; font-size:0.88rem;">Total Persentase Bobot SKI:</td>
+                        <td style="text-align:center; padding:10px 12px; color:${isComplete ? '#16a34a' : '#ea580c'}; font-weight:800; font-size:1.05rem; background:${isComplete ? '#dcfce7' : '#fef3c7'};">${roundedBobot}%</td>
+                        <td style="padding:10px 12px; color:${isComplete ? '#16a34a' : '#ea580c'}; font-size:0.82rem;">${isComplete ? '<i class="fas fa-check-circle"></i> Lengkap 100%' : '<i class="fas fa-clock"></i> Status Draf (' + roundedBobot + '%)'}</td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
-        <div style="display:flex; justify-content:flex-end;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:16px; border-top:2px solid #e2e8f0; padding-top:14px; background:#f8fafc; padding:12px 16px; border-radius:8px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-weight:700; color:#334155; font-size:0.9rem;">Total Persentase Bobot SKI:</span>
+                <span style="font-weight:800; font-size:1.05rem; color:${isComplete ? '#16a34a' : '#b45309'}; background:${isComplete ? '#dcfce7' : '#fef3c7'}; padding:4px 12px; border-radius:8px; border:1px solid ${isComplete ? '#86efac' : '#fde68a'};">
+                    ${roundedBobot}% ${isComplete ? '(Lengkap)' : '(Draf)'}
+                </span>
+            </div>
             <button class="btn-secondary" onclick="document.getElementById('modal-detail-ski').style.display='none'">Tutup</button>
         </div>
     `;
@@ -3543,7 +3555,17 @@ window.deleteGroupSki = async (encodedKey) => {
     initDaftarSki(true);
 };
 
-window.duplicateGroupSki = (encodedKey) => {
+window.duplicateGroupSki = async (encodedKey) => {
+    // Ensure SKI user data is loaded first
+    if (!_skiUserData || _skiUserData.length === 0) {
+        if (APP_CONFIG.USE_MOCK) {
+            _skiUserData = MOCK_DB.users;
+        } else {
+            const uList = await loadUsersData();
+            _skiUserData = (uList && uList.length > 0) ? uList : (typeof MOCK_DB !== 'undefined' ? MOCK_DB.users : []);
+        }
+    }
+
     const key = decodeURIComponent(encodedKey);
     const originItems = _allSkisData.filter(item => {
         const u = item.targetUnit || '-';
@@ -3567,13 +3589,17 @@ window.duplicateGroupSki = (encodedKey) => {
 
     // Dapatkan list Unit yang bisa dipilih
     const isAdmin = ['Super Admin', 'Direktur', 'General Manager'].includes(currentUser.level);
-    let allUnits = [...new Set(_skiUserData.map(u => u.unit).filter(Boolean))];
+    let allUnits = [...new Set((_skiUserData || []).map(u => u.unit).filter(Boolean))];
+    if (!allUnits.length) {
+        allUnits = ['SD', 'SMP', 'SMA', 'TK', 'HRD', 'GA', 'FA', 'Yayasan'];
+    }
     if (!isAdmin) {
         allUnits = [currentUser.unit];
     }
 
     const levelOrder = ['Pelaksana', 'Staff', 'Tim Leader', 'Supervisor', 'Manager', 'General Manager', 'Direktur'];
     const hiddenLevels = ['super admin', 'superadmin', 'gm', 'general manager', 'direksi', 'direktur'];
+    const defaultLevels = ['Pelaksana', 'Staff', 'Tim Leader', 'Supervisor', 'Manager'];
 
     body.innerHTML = `
         <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px 14px; margin-bottom:18px;">
@@ -3626,20 +3652,27 @@ window.duplicateGroupSki = (encodedKey) => {
         const selectedLvl = dupLevel ? dupLevel.value : '';
         const selectedU = dupUnit ? dupUnit.value : '';
 
-        let filteredUsers = _skiUserData;
+        let filteredUsers = _skiUserData || [];
         if (selectedU) filteredUsers = filteredUsers.filter(u => u.unit === selectedU);
         if (selectedLvl) filteredUsers = filteredUsers.filter(u => u.level === selectedLvl);
 
         let jabatans = [...new Set(filteredUsers.map(u => u.jabatan).filter(Boolean))];
         if (jabatans.length === 0 && selectedLvl) {
-            jabatans = [...new Set(_skiUserData.filter(u => u.level === selectedLvl).map(u => u.jabatan).filter(Boolean))];
+            jabatans = [...new Set((_skiUserData || []).filter(u => u.level === selectedLvl).map(u => u.jabatan).filter(Boolean))];
         }
 
-        if (jabatans.length === 0 && selectedLvl === 'Manager') {
-            if (selectedU) {
-                jabatans = [`Manager ${selectedU}`, `Kepala ${selectedU}`];
+        // Smart fallback jabatans if no specific user jabatan exists for the selected unit & level
+        if (jabatans.length === 0 && selectedLvl) {
+            if (selectedLvl === 'Manager') {
+                jabatans = selectedU ? [`Manager ${selectedU}`, `Kepala ${selectedU}`] : ['Manager IT', 'Manager HRD', 'Kepala Sekolah SD', 'Kepala Sekolah SMP', 'Kepala Sekolah SMA', 'Kepala Sekolah TK', 'Manager Operasional', 'Manager Keuangan'];
+            } else if (selectedLvl === 'Supervisor') {
+                jabatans = selectedU ? [`Supervisor ${selectedU}`, `Wakasek Kesiswaan ${selectedU}`, `Wakasek Kurikulum ${selectedU}`] : [`Supervisor ${selectedU}`];
+            } else if (selectedLvl === 'Staff') {
+                jabatans = selectedU ? [`Guru ${selectedU}`, `Staff ${selectedU}`, `Administrasi ${selectedU}`] : [`Staff ${selectedU || ''}`];
+            } else if (selectedLvl === 'Tim Leader') {
+                jabatans = selectedU ? [`Tim Leader ${selectedU}`, `Koordinator ${selectedU}`] : [`Tim Leader ${selectedU || ''}`];
             } else {
-                jabatans = ['Manager IT', 'Manager HRD', 'Kepala Sekolah SD', 'Kepala Sekolah SMP', 'Kepala Sekolah SMA', 'Kepala Sekolah TK', 'Manager Operasional', 'Manager Keuangan'];
+                jabatans = [`${selectedLvl} ${selectedU || ''}`.trim()];
             }
         }
 
@@ -3665,12 +3698,15 @@ window.duplicateGroupSki = (encodedKey) => {
         if (!dupLevel) return;
         const selectedU = dupUnit ? dupUnit.value : '';
 
-        let filteredUsers = _skiUserData;
+        let filteredUsers = _skiUserData || [];
         if (selectedU) filteredUsers = filteredUsers.filter(u => u.unit === selectedU);
 
         let levels = [...new Set(filteredUsers.map(u => u.level).filter(Boolean))];
-        if (levels.length === 0 && selectedU) {
-            levels = [...new Set(_skiUserData.map(u => u.level).filter(Boolean))];
+        if (levels.length === 0) {
+            levels = [...new Set((_skiUserData || []).map(u => u.level).filter(Boolean))];
+        }
+        if (levels.length === 0) {
+            levels = defaultLevels;
         }
 
         levels.sort((a, b) => levelOrder.indexOf(a) - levelOrder.indexOf(b));
