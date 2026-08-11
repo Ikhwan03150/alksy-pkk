@@ -240,8 +240,7 @@
                 <div class="card-header">
                     <div>
                         <h3 class="gradient-text"><i class="fas fa-table"></i> Buat Template SKI Jabatan</h3>
-                        <p class="text-muted" style="margin:4px 0 0; font-size:0.85rem;">Akumulasi bobot baris SKI harus
-                            bernilai tepat 100%.</p>
+                        <p class="text-muted" style="margin:4px 0 0; font-size:0.85rem;">Anda dapat menyimpan draf sementara (bobot &lt; 100%) atau melengkapinya hingga 100%.</p>
                     </div>
                 </div>
 
@@ -288,7 +287,7 @@
                     <!-- Footer Actions -->
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
                         <button class="btn-secondary" id="btn-tambah-baris-ski" style="padding:10px 20px; font-weight:600;"><i class="fas fa-plus"></i> Tambah Baris SKI</button>
-                        <button class="btn-primary" id="btn-simpan-template-ski" style="background:#059669; padding:10px 24px; font-weight:600;"><i class="fas fa-save"></i> Simpan Template SKI</button>
+                        <button class="btn-primary" id="btn-simpan-template-ski" style="background:#059669; padding:10px 24px; font-weight:600;"><i class="fas fa-save"></i> Simpan Draf / Template SKI</button>
                     </div>
                 </div>
             </div>
@@ -318,22 +317,21 @@
                     <!-- Table -->
                     <div class="table-responsive">
                         <table class="table table-bordered table-hover" id="table-daftar-ski"
-                            style="font-size:0.85rem; min-width:700px;">
+                            style="font-size:0.85rem; min-width:750px;">
                             <thead style="background:#1e293b; color:white;">
                                 <tr>
                                     <th style="width:50px; text-align:center; background:#1e293b; color:white;">NO</th>
-                                    <th style="width:140px; background:#1e293b; color:white;">TARGET UNIT</th>
-                                    <th style="width:140px; background:#1e293b; color:white;">LEVEL JABATAN</th>
-                                    <th style="min-width:200px; background:#1e293b; color:white;">TARGET JABATAN</th>
-                                    <th style="width:120px; text-align:center; background:#1e293b; color:white;">TARGET
-                                    </th>
-                                    <th style="width:140px; text-align:center; background:#1e293b; color:white;">AKSI
-                                    </th>
+                                    <th style="width:130px; background:#1e293b; color:white;">TARGET UNIT</th>
+                                    <th style="width:130px; background:#1e293b; color:white;">LEVEL JABATAN</th>
+                                    <th style="min-width:180px; background:#1e293b; color:white;">TARGET JABATAN</th>
+                                    <th style="width:110px; text-align:center; background:#1e293b; color:white;">TARGET</th>
+                                    <th style="width:150px; text-align:center; background:#1e293b; color:white;">STATUS BOBOT</th>
+                                    <th style="width:130px; text-align:center; background:#1e293b; color:white;">AKSI</th>
                                 </tr>
                             </thead>
                             <tbody id="tbody-daftar-ski">
                                 <tr>
-                                    <td colspan="6" class="text-center" style="padding:30px;"><i
+                                    <td colspan="7" class="text-center" style="padding:30px;"><i
                                             class="fas fa-spinner fa-spin"></i> Memuat data SKI dari database...</td>
                                 </tr>
                             </tbody>
@@ -357,6 +355,49 @@
                 </div>
                 <div id="modal-ski-body">
                     <!-- Dynamic details -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Duplikat Template SKI -->
+        <div id="modal-duplikat-ski"
+            style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center; padding:15px;">
+            <div class="card glass-card"
+                style="width: 100%; max-width:520px; padding: 24px; max-height:90vh; overflow-y:auto;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #e2e8f0; padding-bottom:12px;">
+                    <h4 style="margin:0; color:#1e293b; font-weight:700;"><i class="fas fa-copy text-primary" style="color:#2563eb;"></i> Duplikat Template SKI</h4>
+                    <button onclick="document.getElementById('modal-duplikat-ski').style.display='none'"
+                        style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:#64748b;"><i class="fas fa-times"></i></button>
+                </div>
+                <div id="modal-duplikat-ski-body">
+                    <!-- Dynamic duplicate form -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Konfirmasi Hapus Custom -->
+        <div id="modal-confirm-delete"
+            style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 23, 42, 0.6); backdrop-filter:blur(4px); z-index:10000; justify-content:center; align-items:center; padding:15px;">
+            <div class="card glass-card"
+                style="width: 100%; max-width:440px; padding: 28px; background:white; border-radius:16px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); text-align:center;">
+                
+                <div style="width:64px; height:64px; background:#fef2f2; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px auto; color:#ef4444; font-size:1.8rem; border:2px solid #fee2e2;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                
+                <h3 style="margin:0 0 8px 0; color:#1e293b; font-size:1.25rem; font-weight:700;">Konfirmasi Hapus</h3>
+                
+                <p id="modal-confirm-text" style="color:#64748b; font-size:0.92rem; line-height:1.5; margin:0 0 24px 0;">
+                    Apakah Anda yakin ingin menghapus data ini?
+                </p>
+                
+                <div style="display:flex; gap:12px; justify-content:center;">
+                    <button id="btn-modal-cancel" class="btn-secondary" style="flex:1; padding:10px 16px; border-radius:10px; font-weight:600;">
+                        Batal
+                    </button>
+                    <button id="btn-modal-action" style="flex:1; background:#ef4444; color:white; border:none; padding:10px 16px; border-radius:10px; font-weight:600; cursor:pointer; transition:all 0.2s; box-shadow:0 4px 6px -1px rgba(239, 68, 68, 0.3);">
+                        <i class="fas fa-trash-alt" style="margin-right:6px;"></i> Ya, Hapus
+                    </button>
                 </div>
             </div>
         </div>

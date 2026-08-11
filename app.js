@@ -2357,6 +2357,11 @@ async function initFormSki() {
         }
     }
 
+    // Ensure SKI data is loaded first to check existing templates
+    if (!_isSkisDataLoaded) {
+        await loadSkisData();
+    }
+
     const levelOrder = ['Pelaksana', 'Staff', 'Tim Leader', 'Supervisor', 'Manager', 'General Manager', 'Direktur'];
     const hiddenLevels = ['super admin', 'superadmin', 'gm', 'general manager', 'direksi', 'direktur'];
 
@@ -2387,9 +2392,23 @@ async function initFormSki() {
             }
         }
 
+        // Filter out jabatans that ALREADY exist in _allSkisData for the selected unit & level
+        jabatans = jabatans.filter(j => {
+            const exists = _allSkisData.some(s => {
+                return (s.targetUnit || '').toLowerCase().trim() === (selectedU || '').toLowerCase().trim()
+                    && (s.targetLevel || '').toLowerCase().trim() === (selectedLvl || '').toLowerCase().trim()
+                    && (s.targetJabatan || '').toLowerCase().trim() === (j || '').toLowerCase().trim();
+            });
+            return !exists;
+        });
+
         const currentVal = selJabatan.value;
-        selJabatan.innerHTML = '<option value="">-- Pilih Jabatan --</option>' +
-            jabatans.map(j => `<option value="${j}">${j}</option>`).join('');
+        if (jabatans.length === 0 && selectedLvl) {
+            selJabatan.innerHTML = '<option value="">-- Semua Jabatan pada Level Ini Sudah Dibuat --</option>';
+        } else {
+            selJabatan.innerHTML = '<option value="">-- Pilih Jabatan --</option>' +
+                jabatans.map(j => `<option value="${j}">${j}</option>`).join('');
+        }
 
         if (jabatans.includes(currentVal)) {
             selJabatan.value = currentVal;
@@ -2465,13 +2484,30 @@ async function initFormSki() {
     // --- Event: Simpan Template ---
     if (btnSimpan) {
         btnSimpan.onclick = async () => {
+            if (btnSimpan.disabled) return;
+
+            const origText = btnSimpan.innerHTML;
+            btnSimpan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+            btnSimpan.disabled = true;
+
+            const resetBtn = () => {
+                btnSimpan.innerHTML = origText;
+                btnSimpan.disabled = false;
+            };
+
             const rows = tbody.querySelectorAll('.ski-item-card');
             const selectedUnit = selUnit ? selUnit.value : currentUser.unit;
             const selectedLevel = selLevel ? selLevel.value : '';
             const selectedJabatan = document.getElementById('ski-sel-jabatan')?.value || '';
 
-            if (!selectedLevel) return showToast('Pilih Level Jabatan terlebih dahulu!', 'error');
-            if (!selectedJabatan) return showToast('Pilih Jabatan terlebih dahulu!', 'error');
+            if (!selectedLevel) {
+                resetBtn();
+                return showToast('Pilih Level Jabatan terlebih dahulu!', 'error');
+            }
+            if (!selectedJabatan) {
+                resetBtn();
+                return showToast('Pilih Jabatan terlebih dahulu!', 'error');
+            }
 
             // Hitung total bobot pada form saat ini
             const newTotalBobot = [...rows].reduce((sum, r) => {
@@ -2480,58 +2516,66 @@ async function initFormSki() {
             }, 0);
 
             // --- Cek apakah kombinasi ini sudah ada & hitung sisa bobot ---
-            const checkRes = await fetchGasAPI('getSKIs');
-            if (checkRes && checkRes.success && checkRes.data) {
-                const existingSkis = checkRes.data.filter(s => {
-                    return (s.targetUnit || '').toLowerCase().trim() === (selectedUnit || '').toLowerCase().trim()
-                        && (s.targetLevel || '').toLowerCase().trim() === (selectedLevel || '').toLowerCase().trim()
-                        && (s.targetJabatan || '').toLowerCase().trim() === (selectedJabatan || '').toLowerCase().trim();
-                });
+            const existingSkis = _allSkisData.filter(s => {
+                return (s.targetUnit || '').toLowerCase().trim() === (selectedUnit || '').toLowerCase().trim()
+                    && (s.targetLevel || '').toLowerCase().trim() === (selectedLevel || '').toLowerCase().trim()
+                    && (s.targetJabatan || '').toLowerCase().trim() === (selectedJabatan || '').toLowerCase().trim();
+            });
 
-                if (existingSkis.length > 0) {
-                    // Hitung total bobot yang sudah tersimpan
-                    const existingBobot = existingSkis.reduce((sum, s) => {
-                        const b = parseFloat(s.bobot) || 0;
-                        return sum + (b <= 1 && b > 0 ? b * 100 : b);
-                    }, 0);
+            if (existingSkis.length > 0) {
+                // Hitung total bobot yang sudah tersimpan
+                const existingBobot = existingSkis.reduce((sum, s) => {
+                    const b = parseFloat(s.bobot) || 0;
+                    return sum + (b <= 1 && b > 0 ? b * 100 : b);
+                }, 0);
 
-                    if (Math.round(existingBobot) >= 100) {
-                        return showToast(
-                            `Template SKI untuk "${selectedJabatan}" (Unit: ${selectedUnit}) sudah penuh (100%). Gunakan tombol Edit untuk mengubahnya.`,
-                            'error'
-                        );
-                    }
+                if (Math.round(existingBobot) >= 100) {
+                    resetBtn();
+                    return showToast(
+                        `Template SKI untuk "${selectedJabatan}" (Unit: ${selectedUnit}) sudah penuh (100%). Gunakan tombol Edit untuk mengubahnya.`,
+                        'error'
+                    );
+                }
 
-                    const siBobot = 100 - Math.round(existingBobot);
-                    if (Math.round(newTotalBobot) > siBobot) {
-                        return showToast(
-                            `Sisa bobot yang tersedia untuk jabatan ini hanya ${siBobot}%. Isi form dengan total bobot maksimal ${siBobot}%.`,
-                            'error'
-                        );
-                    }
+                const siBobot = 100 - Math.round(existingBobot);
+                if (Math.round(newTotalBobot) > siBobot) {
+                    resetBtn();
+                    return showToast(
+                        `Sisa bobot yang tersedia untuk jabatan ini hanya ${siBobot}%. Isi form dengan total bobot maksimal ${siBobot}%.`,
+                        'error'
+                    );
                 }
             }
 
             // Validasi total bobot form saat ini tidak boleh lebih dari 100%
             if (newTotalBobot <= 0) {
+                resetBtn();
                 return showToast('Isi minimal 1 baris SKI dengan bobot yang valid!', 'error');
             }
-            if (Math.round(newTotalBobot) > 100) {
-                return showToast(`Total Bobot form ini melebihi 100%. Saat ini: ${newTotalBobot}%`, 'error');
+            // Validasi kelengkapan SELURUH kolom pada setiap baris
+            for (let idx = 0; idx < rows.length; idx++) {
+                const r = rows[idx];
+                const kpi = r.querySelector('.ski-kpi-input')?.value.trim();
+                const ski = r.querySelector('.ski-ski-input')?.value.trim();
+                const target = r.querySelector('.ski-target-input')?.value.trim();
+                const k1 = r.querySelector('.ski-k1-input')?.value.trim();
+                const k2 = r.querySelector('.ski-k2-input')?.value.trim();
+                const k3 = r.querySelector('.ski-k3-input')?.value.trim();
+                const k4 = r.querySelector('.ski-k4-input')?.value.trim();
+                const k5 = r.querySelector('.ski-k5-input')?.value.trim();
+                const bobot = parseFloat(r.querySelector('.ski-bobot-input')?.value || 0);
+
+                if (!kpi || !ski || !target || !k1 || !k2 || !k3 || !k4 || !k5 || bobot <= 0) {
+                    resetBtn();
+                    return showToast(`Harap lengkapi seluruh kolom (KPI, SKI, Target, Skala 1-5, dan Bobot > 0%) pada baris #${idx + 1}!`, 'error');
+                }
             }
 
-            const origText = btnSimpan.innerHTML;
-            btnSimpan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
-            btnSimpan.disabled = true;
-
-            let allSuccess = true;
-            let savedCount = 0;
-            for (const row of rows) {
+            const skiList = [...rows].map(row => {
                 const rawBobot = parseFloat(row.querySelector('.ski-bobot-input')?.value || 0);
                 const bobotFraction = rawBobot > 1 ? (rawBobot / 100) : rawBobot;
-
-                const skiData = {
-                    createdByNIP: currentUser.nip,
+                return {
+                    createdByNIP: currentUser ? currentUser.nip : '',
                     targetUnit: selectedUnit,
                     targetLevel: selectedLevel,
                     targetJabatan: selectedJabatan,
@@ -2545,25 +2589,22 @@ async function initFormSki() {
                     kriteria5: row.querySelector('.ski-k5-input')?.value.trim() || '',
                     bobot: bobotFraction
                 };
-                if (!skiData.ski) continue; // skip baris kosong
-                const res = await fetchGasAPI('saveSKI', { skiData });
-                if (res && res.success) savedCount++;
-                else allSuccess = false;
-            }
+            });
 
-            btnSimpan.innerHTML = origText;
-            btnSimpan.disabled = false;
+            const res = await fetchGasAPI('saveBatchSKI', { skiList });
 
-            if (savedCount > 0 && allSuccess) {
+            if (res && res.success) {
                 _isSkisDataLoaded = false;
-                showToast('Template SKI berhasil disimpan!', 'success');
-                navigate('daftar_ski');
-            } else if (savedCount > 0) {
-                _isSkisDataLoaded = false;
-                showToast('Sebagian SKI berhasil disimpan, sebagian gagal.', 'error');
+                const roundedB = Math.round(newTotalBobot * 10) / 10;
+                if (roundedB >= 100) {
+                    showToast('Template SKI (100% Lengkap) berhasil disimpan!', 'success');
+                } else {
+                    showToast(`Draf Template SKI berhasil disimpan! (Total Bobot: ${roundedB}%)`, 'success');
+                }
                 navigate('daftar_ski');
             } else {
-                showToast('Tidak ada SKI yang disimpan. Pastikan kolom SKI tidak kosong.', 'error');
+                resetBtn();
+                showToast(res ? res.message : 'Gagal menyimpan template SKI.', 'error');
             }
         };
     }
@@ -2597,8 +2638,8 @@ function addSkiRow(data = {}) {
             </div>
             <div style="display:flex; align-items:center; gap:14px;">
                 <div style="display:flex; align-items:center; gap:6px; background:#f8fafc; padding:4px 12px; border-radius:8px; border:1px solid #cbd5e1;">
-                    <label style="font-weight:700; color:#334155; font-size:0.85rem; margin:0;">Bobot:</label>
-                    <input type="number" class="form-control ski-bobot-input" min="0" max="100" value="${initialBobot}" placeholder="0" style="width:70px; text-align:center; font-weight:700; color:#16a34a; font-size:0.95rem; padding:4px 6px;" oninput="updateSkiTotalBobot()">
+                    <label style="font-weight:700; color:#334155; font-size:0.85rem; margin:0;">Bobot <span style="color:#ef4444;">*</span>:</label>
+                    <input type="number" class="form-control ski-bobot-input" min="0" max="100" value="${initialBobot}" placeholder="0" style="width:70px; text-align:center; font-weight:700; color:#16a34a; font-size:0.95rem; padding:4px 6px;" oninput="updateSkiTotalBobot()" required>
                     <span style="font-weight:700; color:#475569; font-size:0.85rem;">%</span>
                 </div>
                 <button type="button" onclick="removeSkiRow('${rowId}')" style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; padding:6px 12px; border-radius:8px; cursor:pointer; font-weight:600; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;">
@@ -2610,9 +2651,9 @@ function addSkiRow(data = {}) {
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap:14px; margin-bottom:14px;">
             <div>
                 <label style="font-weight:700; font-size:0.82rem; color:#475569; display:block; margin-bottom:4px;">
-                    <i class="fas fa-bullseye" style="color:#2563eb;"></i> KPI Departemen
+                    <i class="fas fa-bullseye" style="color:#2563eb;"></i> KPI Departemen <span style="color:#ef4444;">*</span>
                 </label>
-                <textarea class="form-control ski-kpi-input" style="min-height:75px; font-size:0.85rem; line-height:1.4; resize:vertical;" placeholder="Tuliskan KPI Departemen...">${data.kpiDepartemen || ''}</textarea>
+                <textarea class="form-control ski-kpi-input" style="min-height:75px; font-size:0.85rem; line-height:1.4; resize:vertical;" placeholder="Tuliskan KPI Departemen..." required>${data.kpiDepartemen || ''}</textarea>
             </div>
             <div>
                 <label style="font-weight:700; font-size:0.82rem; color:#475569; display:block; margin-bottom:4px;">
@@ -2622,36 +2663,36 @@ function addSkiRow(data = {}) {
             </div>
             <div>
                 <label style="font-weight:700; font-size:0.82rem; color:#475569; display:block; margin-bottom:4px;">
-                    <i class="fas fa-flag" style="color:#d97706;"></i> Target Detail
+                    <i class="fas fa-flag" style="color:#d97706;"></i> Target Detail <span style="color:#ef4444;">*</span>
                 </label>
-                <textarea class="form-control ski-target-input" style="min-height:75px; font-size:0.85rem; line-height:1.4; resize:vertical;" placeholder="Contoh: 100% selesai tepat waktu...">${data.targetDetail || ''}</textarea>
+                <textarea class="form-control ski-target-input" style="min-height:75px; font-size:0.85rem; line-height:1.4; resize:vertical;" placeholder="Contoh: 100% selesai tepat waktu..." required>${data.targetDetail || ''}</textarea>
             </div>
         </div>
 
         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px;">
             <label style="font-weight:700; font-size:0.82rem; color:#334155; display:block; margin-bottom:8px;">
-                <i class="fas fa-sliders-h" style="color:#4f46e5;"></i> Kriteria Skala Penilaian (1 s.d 5)
+                <i class="fas fa-sliders-h" style="color:#4f46e5;"></i> Kriteria Skala Penilaian (1 s.d 5) <span style="color:#ef4444;">*</span>
             </label>
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap:10px;">
                 <div>
-                    <div style="font-size:0.75rem; font-weight:700; color:#ef4444; margin-bottom:3px; background:#fee2e2; padding:3px 6px; border-radius:4px; text-align:center;">Skala 1 (Sangat Kurang)</div>
-                    <textarea class="form-control ski-k1-input" style="min-height:65px; font-size:0.8rem; padding:6px; resize:vertical;" placeholder="Deskripsi skala 1...">${data.kriteria1 || ''}</textarea>
+                    <div style="font-size:0.75rem; font-weight:700; color:#ef4444; margin-bottom:3px; background:#fee2e2; padding:3px 6px; border-radius:4px; text-align:center;">Skala 1 (Sangat Kurang) *</div>
+                    <textarea class="form-control ski-k1-input" style="min-height:65px; font-size:0.8rem; padding:6px; resize:vertical;" placeholder="Deskripsi skala 1..." required>${data.kriteria1 || ''}</textarea>
                 </div>
                 <div>
-                    <div style="font-size:0.75rem; font-weight:700; color:#ea580c; margin-bottom:3px; background:#ffedd5; padding:3px 6px; border-radius:4px; text-align:center;">Skala 2 (Kurang)</div>
-                    <textarea class="form-control ski-k2-input" style="min-height:65px; font-size:0.8rem; padding:6px; resize:vertical;" placeholder="Deskripsi skala 2...">${data.kriteria2 || ''}</textarea>
+                    <div style="font-size:0.75rem; font-weight:700; color:#ea580c; margin-bottom:3px; background:#ffedd5; padding:3px 6px; border-radius:4px; text-align:center;">Skala 2 (Kurang) *</div>
+                    <textarea class="form-control ski-k2-input" style="min-height:65px; font-size:0.8rem; padding:6px; resize:vertical;" placeholder="Deskripsi skala 2..." required>${data.kriteria2 || ''}</textarea>
                 </div>
                 <div>
-                    <div style="font-size:0.75rem; font-weight:700; color:#ca8a04; margin-bottom:3px; background:#fef9c3; padding:3px 6px; border-radius:4px; text-align:center;">Skala 3 (Cukup)</div>
-                    <textarea class="form-control ski-k3-input" style="min-height:65px; font-size:0.8rem; padding:6px; resize:vertical;" placeholder="Deskripsi skala 3...">${data.kriteria3 || ''}</textarea>
+                    <div style="font-size:0.75rem; font-weight:700; color:#ca8a04; margin-bottom:3px; background:#fef9c3; padding:3px 6px; border-radius:4px; text-align:center;">Skala 3 (Cukup) *</div>
+                    <textarea class="form-control ski-k3-input" style="min-height:65px; font-size:0.8rem; padding:6px; resize:vertical;" placeholder="Deskripsi skala 3..." required>${data.kriteria3 || ''}</textarea>
                 </div>
                 <div>
-                    <div style="font-size:0.75rem; font-weight:700; color:#2563eb; margin-bottom:3px; background:#dbeafe; padding:3px 6px; border-radius:4px; text-align:center;">Skala 4 (Baik)</div>
-                    <textarea class="form-control ski-k4-input" style="min-height:65px; font-size:0.8rem; padding:6px; resize:vertical;" placeholder="Deskripsi skala 4...">${data.kriteria4 || ''}</textarea>
+                    <div style="font-size:0.75rem; font-weight:700; color:#2563eb; margin-bottom:3px; background:#dbeafe; padding:3px 6px; border-radius:4px; text-align:center;">Skala 4 (Baik) *</div>
+                    <textarea class="form-control ski-k4-input" style="min-height:65px; font-size:0.8rem; padding:6px; resize:vertical;" placeholder="Deskripsi skala 4..." required>${data.kriteria4 || ''}</textarea>
                 </div>
                 <div>
-                    <div style="font-size:0.75rem; font-weight:700; color:#16a34a; margin-bottom:3px; background:#dcfce7; padding:3px 6px; border-radius:4px; text-align:center;">Skala 5 (Sangat Baik)</div>
-                    <textarea class="form-control ski-k5-input" style="min-height:65px; font-size:0.8rem; padding:6px; resize:vertical;" placeholder="Deskripsi skala 5...">${data.kriteria5 || ''}</textarea>
+                    <div style="font-size:0.75rem; font-weight:700; color:#16a34a; margin-bottom:3px; background:#dcfce7; padding:3px 6px; border-radius:4px; text-align:center;">Skala 5 (Sangat Baik) *</div>
+                    <textarea class="form-control ski-k5-input" style="min-height:65px; font-size:0.8rem; padding:6px; resize:vertical;" placeholder="Deskripsi skala 5..." required>${data.kriteria5 || ''}</textarea>
                 </div>
             </div>
         </div>
@@ -2777,10 +2818,10 @@ async function initDaftarSki(forceRefresh = false) {
     }
 
     if (!_isSkisDataLoaded || forceRefresh) {
-        tbody.innerHTML = '<tr><td colspan="10" class="text-center" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i> Memuat data SKI dari database...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i> Memuat data SKI dari database...</td></tr>';
         const data = await loadSkisData(forceRefresh);
         if (!data) {
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Gagal mengambil data SKI dari database.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Gagal mengambil data SKI dari database.</td></tr>';
             return;
         }
     }
@@ -2872,11 +2913,19 @@ async function initDaftarSki(forceRefresh = false) {
         });
 
         if (filteredGroups.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:20px; color:#94a3b8;">Tidak ada data template SKI yang sesuai.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:20px; color:#94a3b8;">Tidak ada data template SKI yang sesuai.</td></tr>';
             return;
         }
 
         tbody.innerHTML = filteredGroups.map((g, idx) => {
+            // Hitung total bobot kelompok ini
+            const totalBobotGroup = g.skis.reduce((sum, item) => {
+                let b = parseFloat(item.bobot) || 0;
+                return sum + ((b <= 1 && b > 0) ? b * 100 : b);
+            }, 0);
+            const roundedBobot = Math.round(totalBobotGroup * 10) / 10;
+            const isComplete = Math.round(roundedBobot) >= 100;
+
             // Hak akses edit per grup:
             // - Direktur: read-only
             // - General Manager: hanya bisa edit/hapus SKI khusus level Manager
@@ -2898,6 +2947,12 @@ async function initDaftarSki(forceRefresh = false) {
                         <span style="background:#fef3c7; color:#92400e; padding:3px 10px; border-radius:12px; font-weight:600; font-size:0.8rem;">${g.skis.length} Target</span>
                     </td>
                     <td style="text-align:center;">
+                        ${isComplete ? 
+                            `<span style="background:#dcfce7; color:#15803d; border:1px solid #86efac; padding:3px 10px; border-radius:12px; font-weight:700; font-size:0.78rem; display:inline-flex; align-items:center; gap:4px;"><i class="fas fa-check-circle"></i> ${roundedBobot}% (Lengkap)</span>` :
+                            `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:3px 10px; border-radius:12px; font-weight:700; font-size:0.78rem; display:inline-flex; align-items:center; gap:4px;"><i class="fas fa-clock"></i> ${roundedBobot}% (Draf)</span>`
+                        }
+                    </td>
+                    <td style="text-align:center;">
                         ${!canEditGroup ? `
                             <div style="display:flex; justify-content:center;">
                                 <button class="btn-outline" style="padding:4px 12px; font-size:0.78rem; border-color:#3b82f6; color:#1d4ed8;" onclick="viewGroupSki('${encodeURIComponent(g.key)}')">
@@ -2908,6 +2963,9 @@ async function initDaftarSki(forceRefresh = false) {
                             <div style="display:flex; justify-content:center; gap:6px;">
                                 <button class="btn-outline" style="padding:4px 10px; font-size:0.78rem;" onclick="editGroupSki('${encodeURIComponent(g.key)}')">
                                     <i class="fas fa-edit"></i> Edit
+                                </button>
+                                <button class="btn-outline" style="padding:4px 10px; font-size:0.78rem; border-color:#2563eb; color:#1d4ed8; background:#eff6ff;" onclick="duplicateGroupSki('${encodeURIComponent(g.key)}')" title="Duplikat Template SKI Ini">
+                                    <i class="fas fa-copy"></i> Duplikat
                                 </button>
                                 <button style="background:#ef4444; color:white; border:none; width:30px; height:30px; border-radius:6px; cursor:pointer;" onclick="deleteGroupSki('${encodeURIComponent(g.key)}')" title="Hapus Template Jabatan Ini">
                                     <i class="fas fa-trash" style="font-size:0.78rem;"></i>
@@ -2975,8 +3033,8 @@ window.addModalEditRow = (data = {}) => {
             </div>
             <div style="display:flex; align-items:center; gap:12px;">
                 <div style="display:flex; align-items:center; gap:6px; background:#f8fafc; padding:3px 10px; border-radius:6px; border:1px solid #cbd5e1;">
-                    <label style="font-weight:700; color:#334155; font-size:0.8rem; margin:0;">Bobot:</label>
-                    <input type="number" class="form-control edit-bobot" min="0" max="100" value="${data.bobot || ''}" placeholder="0" style="width:65px; text-align:center; font-weight:700; color:#16a34a; font-size:0.9rem; padding:3px 6px;" oninput="updateModalEditTotalBobot()">
+                    <label style="font-weight:700; color:#334155; font-size:0.8rem; margin:0;">Bobot <span style="color:#ef4444;">*</span>:</label>
+                    <input type="number" class="form-control edit-bobot" min="0" max="100" value="${data.bobot || ''}" placeholder="0" style="width:65px; text-align:center; font-weight:700; color:#16a34a; font-size:0.9rem; padding:3px 6px;" oninput="updateModalEditTotalBobot()" required>
                     <span style="font-weight:700; color:#475569; font-size:0.8rem;">%</span>
                 </div>
                 <button type="button" onclick="removeModalEditRow(this)" style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; padding:5px 10px; border-radius:6px; cursor:pointer; font-weight:600; font-size:0.78rem; display:inline-flex; align-items:center; gap:5px;" title="Hapus Baris Ini">
@@ -2987,41 +3045,41 @@ window.addModalEditRow = (data = {}) => {
 
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin-bottom:12px;">
             <div>
-                <label style="font-weight:700; font-size:0.8rem; color:#475569; display:block; margin-bottom:4px;">KPI Departemen</label>
-                <textarea class="form-control edit-kpi" style="min-height:70px; font-size:0.83rem; line-height:1.4; resize:vertical;" placeholder="KPI Departemen...">${data.kpiDepartemen || ''}</textarea>
+                <label style="font-weight:700; font-size:0.8rem; color:#475569; display:block; margin-bottom:4px;">KPI Departemen <span style="color:#ef4444;">*</span></label>
+                <textarea class="form-control edit-kpi" style="min-height:70px; font-size:0.83rem; line-height:1.4; resize:vertical;" placeholder="KPI Departemen..." required>${data.kpiDepartemen || ''}</textarea>
             </div>
             <div>
                 <label style="font-weight:700; font-size:0.8rem; color:#475569; display:block; margin-bottom:4px;">Sasaran Kerja Individu (SKI) <span style="color:#ef4444;">*</span></label>
                 <textarea class="form-control edit-ski" style="min-height:70px; font-size:0.83rem; line-height:1.4; resize:vertical; font-weight:600;" placeholder="Sasaran Kerja..." required>${data.ski || ''}</textarea>
             </div>
             <div>
-                <label style="font-weight:700; font-size:0.8rem; color:#475569; display:block; margin-bottom:4px;">Target Detail</label>
-                <textarea class="form-control edit-target" style="min-height:70px; font-size:0.83rem; line-height:1.4; resize:vertical;" placeholder="Target detail...">${data.targetDetail || ''}</textarea>
+                <label style="font-weight:700; font-size:0.8rem; color:#475569; display:block; margin-bottom:4px;">Target Detail <span style="color:#ef4444;">*</span></label>
+                <textarea class="form-control edit-target" style="min-height:70px; font-size:0.83rem; line-height:1.4; resize:vertical;" placeholder="Target detail..." required>${data.targetDetail || ''}</textarea>
             </div>
         </div>
 
         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px;">
-            <label style="font-weight:700; font-size:0.8rem; color:#334155; display:block; margin-bottom:6px;">Skala Penilaian (1 s.d 5)</label>
+            <label style="font-weight:700; font-size:0.8rem; color:#334155; display:block; margin-bottom:6px;">Skala Penilaian (1 s.d 5) <span style="color:#ef4444;">*</span></label>
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:8px;">
                 <div>
-                    <div style="font-size:0.72rem; font-weight:700; color:#ef4444; margin-bottom:2px; background:#fee2e2; padding:2px 4px; border-radius:4px; text-align:center;">Skala 1 (Sangat Kurang)</div>
-                    <textarea class="form-control edit-k1" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 1...">${data.kriteria1 || ''}</textarea>
+                    <div style="font-size:0.72rem; font-weight:700; color:#ef4444; margin-bottom:2px; background:#fee2e2; padding:2px 4px; border-radius:4px; text-align:center;">Skala 1 (Sangat Kurang) *</div>
+                    <textarea class="form-control edit-k1" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 1..." required>${data.kriteria1 || ''}</textarea>
                 </div>
                 <div>
-                    <div style="font-size:0.72rem; font-weight:700; color:#ea580c; margin-bottom:2px; background:#ffedd5; padding:2px 4px; border-radius:4px; text-align:center;">Skala 2 (Kurang)</div>
-                    <textarea class="form-control edit-k2" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 2...">${data.kriteria2 || ''}</textarea>
+                    <div style="font-size:0.72rem; font-weight:700; color:#ea580c; margin-bottom:2px; background:#ffedd5; padding:2px 4px; border-radius:4px; text-align:center;">Skala 2 (Kurang) *</div>
+                    <textarea class="form-control edit-k2" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 2..." required>${data.kriteria2 || ''}</textarea>
                 </div>
                 <div>
-                    <div style="font-size:0.72rem; font-weight:700; color:#ca8a04; margin-bottom:2px; background:#fef9c3; padding:2px 4px; border-radius:4px; text-align:center;">Skala 3 (Cukup)</div>
-                    <textarea class="form-control edit-k3" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 3...">${data.kriteria3 || ''}</textarea>
+                    <div style="font-size:0.72rem; font-weight:700; color:#ca8a04; margin-bottom:2px; background:#fef9c3; padding:2px 4px; border-radius:4px; text-align:center;">Skala 3 (Cukup) *</div>
+                    <textarea class="form-control edit-k3" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 3..." required>${data.kriteria3 || ''}</textarea>
                 </div>
                 <div>
-                    <div style="font-size:0.72rem; font-weight:700; color:#2563eb; margin-bottom:2px; background:#dbeafe; padding:2px 4px; border-radius:4px; text-align:center;">Skala 4 (Baik)</div>
-                    <textarea class="form-control edit-k4" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 4...">${data.kriteria4 || ''}</textarea>
+                    <div style="font-size:0.72rem; font-weight:700; color:#2563eb; margin-bottom:2px; background:#dbeafe; padding:2px 4px; border-radius:4px; text-align:center;">Skala 4 (Baik) *</div>
+                    <textarea class="form-control edit-k4" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 4..." required>${data.kriteria4 || ''}</textarea>
                 </div>
                 <div>
-                    <div style="font-size:0.72rem; font-weight:700; color:#16a34a; margin-bottom:2px; background:#dcfce7; padding:2px 4px; border-radius:4px; text-align:center;">Skala 5 (Sangat Baik)</div>
-                    <textarea class="form-control edit-k5" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 5...">${data.kriteria5 || ''}</textarea>
+                    <div style="font-size:0.72rem; font-weight:700; color:#16a34a; margin-bottom:2px; background:#dcfce7; padding:2px 4px; border-radius:4px; text-align:center;">Skala 5 (Sangat Baik) *</div>
+                    <textarea class="form-control edit-k5" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 5..." required>${data.kriteria5 || ''}</textarea>
                 </div>
             </div>
         </div>
@@ -3031,23 +3089,16 @@ window.addModalEditRow = (data = {}) => {
     renumberModalEditRows();
 };
 
-window.removeModalEditRow = async (btn) => {
+window._modalPendingDeletedSkiIds = window._modalPendingDeletedSkiIds || [];
+
+window.removeModalEditRow = (btn) => {
     const card = btn.closest('.ski-edit-card') || btn.closest('tr');
     if (!card) return;
     const skiId = card.getAttribute('data-ski-id');
 
     if (skiId) {
-        if (!confirm('Apakah Anda yakin ingin menghapus baris SKI ini?')) return;
-        showToast('Menghapus baris SKI...', 'info');
-        const res = await fetchGasAPI('deleteSKI', { id: skiId });
-        if (res && res.success) {
-            showToast('Baris SKI berhasil dihapus.', 'success');
-            if (APP_CONFIG.USE_MOCK) {
-                _allSkisData = _allSkisData.filter(s => String(s.id) !== String(skiId));
-            }
-        } else {
-            showToast(res ? res.message : 'Gagal menghapus baris SKI.', 'error');
-            return;
+        if (!window._modalPendingDeletedSkiIds.includes(skiId)) {
+            window._modalPendingDeletedSkiIds.push(skiId);
         }
     }
     card.remove();
@@ -3056,6 +3107,8 @@ window.removeModalEditRow = async (btn) => {
 };
 
 window.editGroupSki = (encodedKey) => {
+    window._modalPendingDeletedSkiIds = [];
+
     const key = decodeURIComponent(encodedKey);
     const items = _allSkisData.filter(item => {
         const u = item.targetUnit || '-';
@@ -3101,8 +3154,8 @@ window.editGroupSki = (encodedKey) => {
                             </div>
                             <div style="display:flex; align-items:center; gap:12px;">
                                 <div style="display:flex; align-items:center; gap:6px; background:#f8fafc; padding:3px 10px; border-radius:6px; border:1px solid #cbd5e1;">
-                                    <label style="font-weight:700; color:#334155; font-size:0.8rem; margin:0;">Bobot:</label>
-                                    <input type="number" class="form-control edit-bobot" min="0" max="100" value="${displayB}" placeholder="0" style="width:65px; text-align:center; font-weight:700; color:#16a34a; font-size:0.9rem; padding:3px 6px;" oninput="updateModalEditTotalBobot()">
+                                    <label style="font-weight:700; color:#334155; font-size:0.8rem; margin:0;">Bobot <span style="color:#ef4444;">*</span>:</label>
+                                    <input type="number" class="form-control edit-bobot" min="0" max="100" value="${displayB}" placeholder="0" style="width:65px; text-align:center; font-weight:700; color:#16a34a; font-size:0.9rem; padding:3px 6px;" oninput="updateModalEditTotalBobot()" required>
                                     <span style="font-weight:700; color:#475569; font-size:0.8rem;">%</span>
                                 </div>
                                 <button type="button" onclick="removeModalEditRow(this)" style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; padding:5px 10px; border-radius:6px; cursor:pointer; font-weight:600; font-size:0.78rem; display:inline-flex; align-items:center; gap:5px;" title="Hapus Baris Ini">
@@ -3113,41 +3166,41 @@ window.editGroupSki = (encodedKey) => {
 
                         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin-bottom:12px;">
                             <div>
-                                <label style="font-weight:700; font-size:0.8rem; color:#475569; display:block; margin-bottom:4px;">KPI Departemen</label>
-                                <textarea class="form-control edit-kpi" style="min-height:70px; font-size:0.83rem; line-height:1.4; resize:vertical;" placeholder="KPI Departemen...">${item.kpiDepartemen || ''}</textarea>
+                                <label style="font-weight:700; font-size:0.8rem; color:#475569; display:block; margin-bottom:4px;">KPI Departemen <span style="color:#ef4444;">*</span></label>
+                                <textarea class="form-control edit-kpi" style="min-height:70px; font-size:0.83rem; line-height:1.4; resize:vertical;" placeholder="KPI Departemen..." required>${item.kpiDepartemen || ''}</textarea>
                             </div>
                             <div>
                                 <label style="font-weight:700; font-size:0.8rem; color:#475569; display:block; margin-bottom:4px;">Sasaran Kerja Individu (SKI) <span style="color:#ef4444;">*</span></label>
                                 <textarea class="form-control edit-ski" style="min-height:70px; font-size:0.83rem; line-height:1.4; resize:vertical; font-weight:600;" placeholder="Sasaran Kerja..." required>${item.ski || ''}</textarea>
                             </div>
                             <div>
-                                <label style="font-weight:700; font-size:0.8rem; color:#475569; display:block; margin-bottom:4px;">Target Detail</label>
-                                <textarea class="form-control edit-target" style="min-height:70px; font-size:0.83rem; line-height:1.4; resize:vertical;" placeholder="Target detail...">${item.targetDetail || ''}</textarea>
+                                <label style="font-weight:700; font-size:0.8rem; color:#475569; display:block; margin-bottom:4px;">Target Detail <span style="color:#ef4444;">*</span></label>
+                                <textarea class="form-control edit-target" style="min-height:70px; font-size:0.83rem; line-height:1.4; resize:vertical;" placeholder="Target detail..." required>${item.targetDetail || ''}</textarea>
                             </div>
                         </div>
 
                         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px;">
-                            <label style="font-weight:700; font-size:0.8rem; color:#334155; display:block; margin-bottom:6px;">Skala Penilaian (1 s.d 5)</label>
+                            <label style="font-weight:700; font-size:0.8rem; color:#334155; display:block; margin-bottom:6px;">Skala Penilaian (1 s.d 5) <span style="color:#ef4444;">*</span></label>
                             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:8px;">
                                 <div>
-                                    <div style="font-size:0.72rem; font-weight:700; color:#ef4444; margin-bottom:2px; background:#fee2e2; padding:2px 4px; border-radius:4px; text-align:center;">Skala 1 (Sangat Kurang)</div>
-                                    <textarea class="form-control edit-k1" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 1...">${item.kriteria1 || ''}</textarea>
+                                    <div style="font-size:0.72rem; font-weight:700; color:#ef4444; margin-bottom:2px; background:#fee2e2; padding:2px 4px; border-radius:4px; text-align:center;">Skala 1 (Sangat Kurang) *</div>
+                                    <textarea class="form-control edit-k1" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 1..." required>${item.kriteria1 || ''}</textarea>
                                 </div>
                                 <div>
-                                    <div style="font-size:0.72rem; font-weight:700; color:#ea580c; margin-bottom:2px; background:#ffedd5; padding:2px 4px; border-radius:4px; text-align:center;">Skala 2 (Kurang)</div>
-                                    <textarea class="form-control edit-k2" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 2...">${item.kriteria2 || ''}</textarea>
+                                    <div style="font-size:0.72rem; font-weight:700; color:#ea580c; margin-bottom:2px; background:#ffedd5; padding:2px 4px; border-radius:4px; text-align:center;">Skala 2 (Kurang) *</div>
+                                    <textarea class="form-control edit-k2" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 2..." required>${item.kriteria2 || ''}</textarea>
                                 </div>
                                 <div>
-                                    <div style="font-size:0.72rem; font-weight:700; color:#ca8a04; margin-bottom:2px; background:#fef9c3; padding:2px 4px; border-radius:4px; text-align:center;">Skala 3 (Cukup)</div>
-                                    <textarea class="form-control edit-k3" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 3...">${item.kriteria3 || ''}</textarea>
+                                    <div style="font-size:0.72rem; font-weight:700; color:#ca8a04; margin-bottom:2px; background:#fef9c3; padding:2px 4px; border-radius:4px; text-align:center;">Skala 3 (Cukup) *</div>
+                                    <textarea class="form-control edit-k3" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 3..." required>${item.kriteria3 || ''}</textarea>
                                 </div>
                                 <div>
-                                    <div style="font-size:0.72rem; font-weight:700; color:#2563eb; margin-bottom:2px; background:#dbeafe; padding:2px 4px; border-radius:4px; text-align:center;">Skala 4 (Baik)</div>
-                                    <textarea class="form-control edit-k4" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 4...">${item.kriteria4 || ''}</textarea>
+                                    <div style="font-size:0.72rem; font-weight:700; color:#2563eb; margin-bottom:2px; background:#dbeafe; padding:2px 4px; border-radius:4px; text-align:center;">Skala 4 (Baik) *</div>
+                                    <textarea class="form-control edit-k4" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 4..." required>${item.kriteria4 || ''}</textarea>
                                 </div>
                                 <div>
-                                    <div style="font-size:0.72rem; font-weight:700; color:#16a34a; margin-bottom:2px; background:#dcfce7; padding:2px 4px; border-radius:4px; text-align:center;">Skala 5 (Sangat Baik)</div>
-                                    <textarea class="form-control edit-k5" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 5...">${item.kriteria5 || ''}</textarea>
+                                    <div style="font-size:0.72rem; font-weight:700; color:#16a34a; margin-bottom:2px; background:#dcfce7; padding:2px 4px; border-radius:4px; text-align:center;">Skala 5 (Sangat Baik) *</div>
+                                    <textarea class="form-control edit-k5" style="min-height:55px; font-size:0.78rem; padding:4px 6px; resize:vertical;" placeholder="Skala 5..." required>${item.kriteria5 || ''}</textarea>
                                 </div>
                             </div>
                         </div>
@@ -3166,7 +3219,7 @@ window.editGroupSki = (encodedKey) => {
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
             <button type="button" class="btn-secondary" onclick="addModalEditRow()"><i class="fas fa-plus"></i> Tambah Baris</button>
             <div style="display:flex; gap:10px;">
-                <button class="btn-secondary" onclick="document.getElementById('modal-detail-ski').style.display='none'">Batal</button>
+                <button class="btn-secondary" onclick="window._modalPendingDeletedSkiIds = []; document.getElementById('modal-detail-ski').style.display='none'">Batal</button>
                 <button class="btn-primary" onclick="saveGroupSkiEdit('${encodeURIComponent(key)}')"><i class="fas fa-save"></i> Simpan Perubahan</button>
             </div>
         </div>
@@ -3199,9 +3252,16 @@ window.viewGroupSki = (encodedKey) => {
         cardEl.style.maxWidth = '1100px';
     }
 
+    const totalBobotGroup = items.reduce((sum, item) => {
+        let b = parseFloat(item.bobot) || 0;
+        return sum + ((b <= 1 && b > 0) ? b * 100 : b);
+    }, 0);
+    const roundedBobot = Math.round(totalBobotGroup * 10) / 10;
+    const isComplete = Math.round(roundedBobot) >= 100;
+
     const first = items[0];
     if (title) title.innerHTML = `<i class="fas fa-eye text-primary"></i> Detail Template SKI: ${first.targetJabatan || '-'}`;
-    if (subtitle) subtitle.innerHTML = `Unit: <strong>${first.targetUnit || '-'}</strong> | Level: <strong>${first.targetLevel || '-'}</strong> | Total: <strong>${items.length} Target</strong>`;
+    if (subtitle) subtitle.innerHTML = `Unit: <strong>${first.targetUnit || '-'}</strong> | Level: <strong>${first.targetLevel || '-'}</strong> | Total: <strong>${items.length} Target</strong> | Status Bobot: <span style="color:${isComplete ? '#16a34a' : '#ea580c'}; font-weight:700;">${roundedBobot}% ${isComplete ? '(Lengkap)' : '(Draf)'}</span>`;
 
     body.innerHTML = `
         <div class="table-responsive" style="margin-bottom:16px;">
@@ -3249,6 +3309,23 @@ window.viewGroupSki = (encodedKey) => {
 };
 
 window.saveGroupSkiEdit = async (encodedKey) => {
+    const btnSimpan = document.querySelector('#modal-detail-ski .btn-primary');
+    if (btnSimpan && btnSimpan.disabled) return;
+
+    let origText = '';
+    if (btnSimpan) {
+        origText = btnSimpan.innerHTML;
+        btnSimpan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+        btnSimpan.disabled = true;
+    }
+
+    const resetBtn = () => {
+        if (btnSimpan) {
+            btnSimpan.innerHTML = origText;
+            btnSimpan.disabled = false;
+        }
+    };
+
     const key = decodeURIComponent(encodedKey);
     const parts = key.split('||');
     const unit = parts[0];
@@ -3256,28 +3333,44 @@ window.saveGroupSkiEdit = async (encodedKey) => {
     const jabatan = parts[2];
 
     const tbodyModal = document.getElementById('tbody-modal-edit-rows');
-    if (!tbodyModal) return;
+    if (!tbodyModal) {
+        resetBtn();
+        return;
+    }
 
     const rows = [...tbodyModal.querySelectorAll('.ski-edit-card, tr')];
-    if (!rows.length) return showToast('Tidak ada baris SKI untuk disimpan.', 'warning');
+    if (!rows.length) {
+        resetBtn();
+        return showToast('Tidak ada baris SKI untuk disimpan.', 'warning');
+    }
 
     const totalBobot = rows.reduce((sum, r) => {
         const b = parseFloat(r.querySelector('.edit-bobot')?.value || 0);
         return sum + b;
     }, 0);
 
-    if (Math.round(totalBobot) !== 100) {
-        return showToast(`Total Bobot harus 100%. Saat ini: ${Math.round(totalBobot * 10) / 10}%`, 'error');
+    if (Math.round(totalBobot) > 100) {
+        resetBtn();
+        return showToast(`Total Bobot tidak boleh lebih dari 100%. Saat ini: ${Math.round(totalBobot * 10) / 10}%`, 'error');
     }
 
-    const btnSimpan = document.querySelector('#modal-detail-ski .btn-primary');
-    let origText = '';
-    if (btnSimpan) {
-        origText = btnSimpan.innerHTML;
-        btnSimpan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
-        btnSimpan.disabled = true;
-    } else {
-        showToast('Menyimpan perubahan...', 'info');
+    // Validasi kelengkapan SELURUH kolom pada setiap baris
+    for (let idx = 0; idx < rows.length; idx++) {
+        const r = rows[idx];
+        const kpi = r.querySelector('.edit-kpi')?.value.trim();
+        const ski = r.querySelector('.edit-ski')?.value.trim();
+        const target = r.querySelector('.edit-target')?.value.trim();
+        const k1 = r.querySelector('.edit-k1')?.value.trim();
+        const k2 = r.querySelector('.edit-k2')?.value.trim();
+        const k3 = r.querySelector('.edit-k3')?.value.trim();
+        const k4 = r.querySelector('.edit-k4')?.value.trim();
+        const k5 = r.querySelector('.edit-k5')?.value.trim();
+        const bobot = parseFloat(r.querySelector('.edit-bobot')?.value || 0);
+
+        if (!kpi || !ski || !target || !k1 || !k2 || !k3 || !k4 || !k5 || bobot <= 0) {
+            resetBtn();
+            return showToast(`Harap lengkapi seluruh kolom (KPI, SKI, Target, Skala 1-5, dan Bobot > 0%) pada Target SKI #${idx + 1}!`, 'error');
+        }
     }
 
     // Sort rows so existing saved rows (with data-ski-id) are saved FIRST,
@@ -3308,6 +3401,17 @@ window.saveGroupSkiEdit = async (encodedKey) => {
             bobot: bobotFraction
         };
     }).filter(item => item.ski);
+
+    // Hapus baris yang ditandai hapus dalam modal saat tombol Simpan Perubahan diklik
+    if (window._modalPendingDeletedSkiIds && window._modalPendingDeletedSkiIds.length > 0) {
+        for (const idToDelete of window._modalPendingDeletedSkiIds) {
+            await fetchGasAPI('deleteSKI', { id: idToDelete });
+            if (APP_CONFIG.USE_MOCK) {
+                _allSkisData = _allSkisData.filter(s => String(s.id) !== String(idToDelete));
+            }
+        }
+        window._modalPendingDeletedSkiIds = [];
+    }
 
     let allSuccess = true;
     let res = await fetchGasAPI('saveBatchSKI', { skiList });
@@ -3341,14 +3445,56 @@ window.saveGroupSkiEdit = async (encodedKey) => {
         modal.style.display = 'none';
     }
 
+    const roundedB = Math.round(totalBobot * 10) / 10;
     if (allSuccess) {
-        showToast('Template SKI berhasil diperbarui!', 'success');
+        if (roundedB >= 100) {
+            showToast('Template SKI (100% Lengkap) berhasil disimpan!', 'success');
+        } else {
+            showToast(`Draf Template SKI berhasil disimpan! (Total Bobot: ${roundedB}%)`, 'success');
+        }
     } else {
-        showToast('Perubahan Template SKI telah disimpan.', 'success');
+        showToast(`Draf Template SKI telah disimpan. (Total Bobot: ${roundedB}%)`, 'success');
     }
 
     _isSkisDataLoaded = false;
     initDaftarSki(true);
+};
+
+window.showCustomConfirm = (message, title = 'Konfirmasi Hapus', actionText = 'Ya, Hapus') => {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('modal-confirm-delete');
+        const txt = document.getElementById('modal-confirm-text');
+        const btnCancel = document.getElementById('btn-modal-cancel');
+        const btnAction = document.getElementById('btn-modal-action');
+        if (!modal) {
+            resolve(confirm(message.replace(/<[^>]*>?/gm, '')));
+            return;
+        }
+
+        if (txt) txt.innerHTML = message;
+        const titleEl = modal.querySelector('h3');
+        if (titleEl) titleEl.innerText = title;
+        if (btnAction) btnAction.innerHTML = `<i class="fas fa-trash-alt" style="margin-right:6px;"></i> ${actionText}`;
+
+        modal.style.display = 'flex';
+
+        const handleCancel = () => {
+            modal.style.display = 'none';
+            if (btnCancel) btnCancel.onclick = null;
+            if (btnAction) btnAction.onclick = null;
+            resolve(false);
+        };
+
+        const handleAction = () => {
+            modal.style.display = 'none';
+            if (btnCancel) btnCancel.onclick = null;
+            if (btnAction) btnAction.onclick = null;
+            resolve(true);
+        };
+
+        if (btnCancel) btnCancel.onclick = handleCancel;
+        if (btnAction) btnAction.onclick = handleAction;
+    });
 };
 
 window.deleteGroupSki = async (encodedKey) => {
@@ -3369,7 +3515,13 @@ window.deleteGroupSki = async (encodedKey) => {
 
     const jabatanName = items[0].targetJabatan || 'Jabatan ini';
 
-    if (!confirm(`Hapus seluruh ${items.length} template SKI untuk ${jabatanName}?`)) return;
+    const confirmed = await showCustomConfirm(
+        `Apakah Anda yakin ingin menghapus seluruh <strong>${items.length} template SKI</strong> untuk <strong>${jabatanName}</strong>?<br><span style="font-size:0.82rem; color:#ef4444; margin-top:8px; display:inline-block;"><i class="fas fa-exclamation-circle"></i> Tindakan ini tidak dapat dibatalkan.</span>`,
+        'Konfirmasi Hapus Template',
+        'Ya, Hapus'
+    );
+
+    if (!confirmed) return;
 
     showToast('Menghapus template SKI...', 'info');
     let allSuccess = true;
@@ -3389,4 +3541,249 @@ window.deleteGroupSki = async (encodedKey) => {
 
     _isSkisDataLoaded = false;
     initDaftarSki(true);
+};
+
+window.duplicateGroupSki = (encodedKey) => {
+    const key = decodeURIComponent(encodedKey);
+    const originItems = _allSkisData.filter(item => {
+        const u = item.targetUnit || '-';
+        const l = item.targetLevel || '-';
+        const j = item.targetJabatan || '-';
+        return `${u}||${l}||${j}` === key;
+    });
+
+    if (!originItems.length) return;
+
+    const modal = document.getElementById('modal-duplikat-ski');
+    const body = document.getElementById('modal-duplikat-ski-body');
+    if (!modal || !body) return;
+
+    const first = originItems[0];
+    const totalBobotGroup = originItems.reduce((sum, item) => {
+        let b = parseFloat(item.bobot) || 0;
+        return sum + ((b <= 1 && b > 0) ? b * 100 : b);
+    }, 0);
+    const roundedBobot = Math.round(totalBobotGroup * 10) / 10;
+
+    // Dapatkan list Unit yang bisa dipilih
+    const isAdmin = ['Super Admin', 'Direktur', 'General Manager'].includes(currentUser.level);
+    let allUnits = [...new Set(_skiUserData.map(u => u.unit).filter(Boolean))];
+    if (!isAdmin) {
+        allUnits = [currentUser.unit];
+    }
+
+    const levelOrder = ['Pelaksana', 'Staff', 'Tim Leader', 'Supervisor', 'Manager', 'General Manager', 'Direktur'];
+    const hiddenLevels = ['super admin', 'superadmin', 'gm', 'general manager', 'direksi', 'direktur'];
+
+    body.innerHTML = `
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px 14px; margin-bottom:18px;">
+            <div style="font-weight:700; color:#1e40af; font-size:0.88rem; margin-bottom:4px;">
+                <i class="fas fa-info-circle"></i> Template Asal yang Disalin:
+            </div>
+            <div style="font-size:0.83rem; color:#1e3a8a;">
+                Jabatan: <strong>${first.targetJabatan}</strong> | Unit: <strong>${first.targetUnit}</strong> | Level: <strong>${first.targetLevel}</strong><br>
+                Jumlah Indikator: <strong>${originItems.length} Target SKI</strong> | Total Bobot: <strong>${roundedBobot}%</strong>
+            </div>
+        </div>
+
+        <div style="font-weight:700; color:#334155; font-size:0.88rem; margin-bottom:12px;">Pilih Target Baru untuk Salinan Template SKI Ini:</div>
+
+        <div class="form-group mb-3">
+            <label style="font-weight:700; font-size:0.82rem; color:#475569;">Target Unit Baru <span style="color:#ef4444;">*</span></label>
+            <select id="dup-sel-unit" class="form-control" style="font-size:0.88rem;">
+                ${allUnits.map(u => `<option value="${u}" ${u === first.targetUnit ? 'selected' : ''}>${u}</option>`).join('')}
+            </select>
+        </div>
+
+        <div class="form-group mb-3">
+            <label style="font-weight:700; font-size:0.82rem; color:#475569;">Target Level Jabatan Baru <span style="color:#ef4444;">*</span></label>
+            <select id="dup-sel-level" class="form-control" style="font-size:0.88rem;">
+                <option value="">-- Pilih Level --</option>
+            </select>
+        </div>
+
+        <div class="form-group mb-4">
+            <label style="font-weight:700; font-size:0.82rem; color:#475569;">Target Jabatan Baru <span style="color:#ef4444;">*</span></label>
+            <select id="dup-sel-jabatan" class="form-control" style="font-size:0.88rem;">
+                <option value="">-- Pilih Jabatan --</option>
+            </select>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; border-top:1px solid #e2e8f0; padding-top:16px;">
+            <button type="button" class="btn-secondary" onclick="document.getElementById('modal-duplikat-ski').style.display='none'">Batal</button>
+            <button type="button" class="btn-primary" id="btn-submit-duplikat" style="background:#2563eb;" onclick="confirmDuplicateSki('${encodeURIComponent(key)}')">
+                <i class="fas fa-copy"></i> Duplikat & Salin Template
+            </button>
+        </div>
+    `;
+
+    const dupUnit = document.getElementById('dup-sel-unit');
+    const dupLevel = document.getElementById('dup-sel-level');
+    const dupJabatan = document.getElementById('dup-sel-jabatan');
+
+    const updateDupJabatanDropdown = () => {
+        if (!dupJabatan) return;
+        const selectedLvl = dupLevel ? dupLevel.value : '';
+        const selectedU = dupUnit ? dupUnit.value : '';
+
+        let filteredUsers = _skiUserData;
+        if (selectedU) filteredUsers = filteredUsers.filter(u => u.unit === selectedU);
+        if (selectedLvl) filteredUsers = filteredUsers.filter(u => u.level === selectedLvl);
+
+        let jabatans = [...new Set(filteredUsers.map(u => u.jabatan).filter(Boolean))];
+        if (jabatans.length === 0 && selectedLvl) {
+            jabatans = [...new Set(_skiUserData.filter(u => u.level === selectedLvl).map(u => u.jabatan).filter(Boolean))];
+        }
+
+        if (jabatans.length === 0 && selectedLvl === 'Manager') {
+            if (selectedU) {
+                jabatans = [`Manager ${selectedU}`, `Kepala ${selectedU}`];
+            } else {
+                jabatans = ['Manager IT', 'Manager HRD', 'Kepala Sekolah SD', 'Kepala Sekolah SMP', 'Kepala Sekolah SMA', 'Kepala Sekolah TK', 'Manager Operasional', 'Manager Keuangan'];
+            }
+        }
+
+        // Filter out jabatans that ALREADY exist in _allSkisData
+        jabatans = jabatans.filter(j => {
+            const exists = _allSkisData.some(s => {
+                return (s.targetUnit || '').toLowerCase().trim() === (selectedU || '').toLowerCase().trim()
+                    && (s.targetLevel || '').toLowerCase().trim() === (selectedLvl || '').toLowerCase().trim()
+                    && (s.targetJabatan || '').toLowerCase().trim() === (j || '').toLowerCase().trim();
+            });
+            return !exists;
+        });
+
+        if (jabatans.length === 0 && selectedLvl) {
+            dupJabatan.innerHTML = '<option value="">-- Semua Jabatan pada Level ini Sudah Ada Template --</option>';
+        } else {
+            dupJabatan.innerHTML = '<option value="">-- Pilih Jabatan --</option>' +
+                jabatans.map(j => `<option value="${j}">${j}</option>`).join('');
+        }
+    };
+
+    const updateDupLevelDropdown = () => {
+        if (!dupLevel) return;
+        const selectedU = dupUnit ? dupUnit.value : '';
+
+        let filteredUsers = _skiUserData;
+        if (selectedU) filteredUsers = filteredUsers.filter(u => u.unit === selectedU);
+
+        let levels = [...new Set(filteredUsers.map(u => u.level).filter(Boolean))];
+        if (levels.length === 0 && selectedU) {
+            levels = [...new Set(_skiUserData.map(u => u.level).filter(Boolean))];
+        }
+
+        levels.sort((a, b) => levelOrder.indexOf(a) - levelOrder.indexOf(b));
+        let allowedLevels = levels.filter(l => !hiddenLevels.includes(l.toLowerCase().trim()));
+
+        dupLevel.innerHTML = '<option value="">-- Pilih Level --</option>' +
+            allowedLevels.map(l => `<option value="${l}">${l}</option>`).join('');
+
+        updateDupJabatanDropdown();
+    };
+
+    if (dupUnit) dupUnit.onchange = () => updateDupLevelDropdown();
+    if (dupLevel) dupLevel.onchange = () => updateDupJabatanDropdown();
+
+    updateDupLevelDropdown();
+    modal.style.display = 'flex';
+};
+
+window.confirmDuplicateSki = async (encodedKey) => {
+    const key = decodeURIComponent(encodedKey);
+    const originItems = _allSkisData.filter(item => {
+        const u = item.targetUnit || '-';
+        const l = item.targetLevel || '-';
+        const j = item.targetJabatan || '-';
+        return `${u}||${l}||${j}` === key;
+    });
+
+    if (!originItems.length) return;
+
+    const dupUnit = document.getElementById('dup-sel-unit');
+    const dupLevel = document.getElementById('dup-sel-level');
+    const dupJabatan = document.getElementById('dup-sel-jabatan');
+
+    const newUnit = dupUnit ? dupUnit.value.trim() : '';
+    const newLevel = dupLevel ? dupLevel.value.trim() : '';
+    const newJabatan = dupJabatan ? dupJabatan.value.trim() : '';
+
+    if (!newUnit) return showToast('Pilih Target Unit Baru!', 'error');
+    if (!newLevel) return showToast('Pilih Target Level Jabatan Baru!', 'error');
+    if (!newJabatan) return showToast('Pilih Target Jabatan Baru!', 'error');
+
+    // Cek apakah kombinasi baru sudah ada
+    const alreadyExists = _allSkisData.some(s => {
+        return (s.targetUnit || '').toLowerCase().trim() === newUnit.toLowerCase()
+            && (s.targetLevel || '').toLowerCase().trim() === newLevel.toLowerCase()
+            && (s.targetJabatan || '').toLowerCase().trim() === newJabatan.toLowerCase();
+    });
+
+    if (alreadyExists) {
+        return showToast(`Template SKI untuk Jabatan "${newJabatan}" sudah ada di sistem!`, 'error');
+    }
+
+    const btnSubmit = document.getElementById('btn-submit-duplikat');
+    let origText = '';
+    if (btnSubmit) {
+        origText = btnSubmit.innerHTML;
+        btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menduplikat...';
+        btnSubmit.disabled = true;
+    }
+
+    // Salin items ke target baru
+    const duplicatedSkiList = originItems.map(item => {
+        let b = parseFloat(item.bobot) || 0;
+        let bobotFraction = (b > 1) ? (b / 100) : b;
+        return {
+            createdByNIP: currentUser ? currentUser.nip : '',
+            targetUnit: newUnit,
+            targetLevel: newLevel,
+            targetJabatan: newJabatan,
+            kpiDepartemen: item.kpiDepartemen || '',
+            ski: item.ski || '',
+            targetDetail: item.targetDetail || '',
+            kriteria1: item.kriteria1 || '',
+            kriteria2: item.kriteria2 || '',
+            kriteria3: item.kriteria3 || '',
+            kriteria4: item.kriteria4 || '',
+            kriteria5: item.kriteria5 || '',
+            bobot: bobotFraction
+        };
+    });
+
+    let res = await fetchGasAPI('saveBatchSKI', { skiList: duplicatedSkiList });
+
+    if (!res || !res.success) {
+        for (const skiData of duplicatedSkiList) {
+            await fetchGasAPI('saveSKI', { skiData });
+        }
+    } else if (APP_CONFIG.USE_MOCK) {
+        duplicatedSkiList.forEach(skiData => {
+            _allSkisData.push({
+                ...skiData,
+                id: 'SKI_DUP_' + Date.now() + Math.random()
+            });
+        });
+    }
+
+    if (btnSubmit) {
+        btnSubmit.innerHTML = origText;
+        btnSubmit.disabled = false;
+    }
+
+    // Tutup modal duplikat
+    const modal = document.getElementById('modal-duplikat-ski');
+    if (modal) modal.style.display = 'none';
+
+    _isSkisDataLoaded = false;
+    await initDaftarSki(true);
+
+    showToast(`🎉 Template SKI berhasil diduplikat untuk ${newJabatan}! Membuka editor...`, 'success');
+
+    // Otomatis buka modal edit untuk template yang baru diduplikat agar user bisa langsung menyesuaikan
+    const newGroupKey = encodeURIComponent(`${newUnit}||${newLevel}||${newJabatan}`);
+    setTimeout(() => {
+        editGroupSki(newGroupKey);
+    }, 300);
 };
