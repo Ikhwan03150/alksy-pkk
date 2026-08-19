@@ -301,12 +301,14 @@
                     style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
                     <div>
                         <h3 class="gradient-text"><i class="fas fa-list-alt"></i> SKI Jabatan</h3>
-                        <p class="text-muted" style="margin:4px 0 0; font-size:0.85rem;">Daftar seluruh Sasaran Kerja
-                            Individu (SKI) yang telah dibuat dalam sistem.</p>
+                        <p class="text-muted" style="margin:4px 0 0; font-size:0.85rem;">Daftar seluruh Sasaran Kerja Individu (SKI) yang telah dibuat dalam sistem.</p>
                     </div>
                     <div style="display:flex; gap:8px; align-items:center;">
                         <button class="btn-secondary" id="btn-refresh-ski" style="font-size:0.85rem; padding:8px 14px;" title="Segarkan Data dari Cloud">
                             <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                        <button class="btn-success" id="btn-upload-csv-ski" style="font-size:0.85rem; padding:8px 16px; background:#10b981; color:white; border-radius:8px; border:none; cursor:pointer;" title="Upload File CSV Data SKI">
+                            <i class="fas fa-file-csv"></i> Upload CSV SKI
                         </button>
                         <button class="btn-primary" id="btn-input-ski-baru" style="font-size:0.85rem; padding:8px 16px;">
                             <i class="fas fa-plus"></i> Input SKI Baru
@@ -314,19 +316,44 @@
                     </div>
                 </div>
                 <div class="card-body">
+                    <!-- Filter & Search Bar -->
+                    <div class="ski-filter-bar" style="display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px; background:#f8fafc; padding:14px; border-radius:12px; border:1px solid #e2e8f0;">
+                        <div style="flex:2; min-width:200px;">
+                            <div style="position:relative;">
+                                <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#94a3b8;"></i>
+                                <input type="text" id="search-ski-text" class="form-control" placeholder="Cari Jabatan, Unit, atau SKI..." style="padding-left:36px; font-size:0.85rem;">
+                            </div>
+                        </div>
+                        <div style="flex:1; min-width:140px;">
+                            <select id="filter-ski-unit" class="form-control" style="font-size:0.85rem;">
+                                <option value="">-- Semua Unit --</option>
+                            </select>
+                        </div>
+                        <div style="flex:1; min-width:140px;">
+                            <select id="filter-ski-level" class="form-control" style="font-size:0.85rem;">
+                                <option value="">-- Semua Level --</option>
+                            </select>
+                        </div>
+                        <div style="flex:1; min-width:140px;">
+                            <select id="filter-ski-jabatan" class="form-control" style="font-size:0.85rem;">
+                                <option value="">-- Semua Jabatan --</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <!-- Table -->
                     <div class="table-responsive">
                         <table class="table table-bordered table-hover" id="table-daftar-ski"
                             style="font-size:0.85rem; min-width:750px;">
                             <thead style="background:#1e293b; color:white;">
                                 <tr>
-                                    <th style="width:50px; text-align:center; background:#1e293b; color:white;">NO</th>
-                                    <th style="width:130px; background:#1e293b; color:white;">TARGET UNIT</th>
-                                    <th style="width:130px; background:#1e293b; color:white;">LEVEL JABATAN</th>
-                                    <th style="min-width:180px; background:#1e293b; color:white;">TARGET JABATAN</th>
-                                    <th style="width:110px; text-align:center; background:#1e293b; color:white;">TARGET</th>
-                                    <th style="width:150px; text-align:center; background:#1e293b; color:white;">STATUS BOBOT</th>
-                                    <th style="width:130px; text-align:center; background:#1e293b; color:white;">AKSI</th>
+                                    <th style="width:40px; text-align:center; background:#1e293b; color:white;">NO</th>
+                                    <th style="min-width:160px; background:#1e293b; color:white;">UNIT</th>
+                                    <th style="min-width:100px; background:#1e293b; color:white;">LEVEL</th>
+                                    <th style="min-width:180px; background:#1e293b; color:white;">JABATAN</th>
+                                    <th style="width:140px; text-align:center; background:#1e293b; color:white; white-space:nowrap;">TARGET SKI</th>
+                                    <th style="width:140px; text-align:center; background:#1e293b; color:white;">BOBOT</th>
+                                    <th style="width:140px; text-align:center; background:#1e293b; color:white;">AKSI</th>
                                 </tr>
                             </thead>
                             <tbody id="tbody-daftar-ski">
@@ -336,6 +363,10 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Pagination Bar -->
+                    <div id="ski-pagination-container" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:16px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:0.85rem; color:#64748b;">
                     </div>
                 </div>
             </div>
@@ -655,8 +686,8 @@
                         <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th>Tgl Ajuan</th>
-                                    <th>NIP</th>
+                                    <th style="width:50px; text-align:center;">No.</th>
+                                    <th>Jabatan</th>
                                     <th>Nama</th>
                                     <th>Unit</th>
                                     <th>Skor</th>
@@ -685,8 +716,8 @@
                         <table class="table align-middle text-nowrap">
                             <thead style="background-color:#f8fafc; color:#64748b;">
                                 <tr>
-                                    <th>TGL AJUAN</th>
-                                    <th>NIP</th>
+                                    <th style="width:50px; text-align:center;">NO.</th>
+                                    <th>JABATAN</th>
                                     <th>NAMA</th>
                                     <th>UNIT</th>
                                     <th>SKOR</th>
@@ -709,7 +740,12 @@
             <div class="card glass-card">
                 <div class="card-header flex-between">
                     <h3 class="gradient-text"><i class="fas fa-desktop"></i> Monitoring PKK</h3>
-                    <span id="monitoring-ta-label" class="status-badge" style="background:#e0f2fe;color:#0369a1;font-size:0.85rem;"></span>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span id="monitoring-ta-label" class="status-badge" style="background:#e0f2fe;color:#0369a1;font-size:0.85rem;"></span>
+                        <button id="btn-export-excel-monitoring" class="btn-success" style="display:none; background:#10b981; color:white; border:none; border-radius:8px; padding:6px 16px; font-size:0.85rem; font-weight:600; cursor:pointer; font-family:inherit; align-items:center; gap:6px; box-shadow:0 2px 4px rgba(16,185,129,0.2);">
+                            <i class="fas fa-file-excel"></i> Export Excel
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <!-- Filter Controls -->
@@ -986,6 +1022,218 @@
         </div>
     </template>
 
+    <!-- Template: Manajemen User (Super Admin) -->
+    <template id="tpl-manajemen_user">
+        <div class="page page-manajemen-user fade-in">
+            <div class="card glass-card">
+                <div class="card-header d-flex justify-content-between align-items-center"
+                    style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <h3 class="gradient-text"><i class="fas fa-users-cog"></i> Manajemen Data User</h3>
+                        <p class="text-muted" style="margin:4px 0 0; font-size:0.85rem;">Kelola seluruh akun pengguna, level jabatan, dan hirarki atasan penilai.</p>
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button class="btn-secondary" id="btn-refresh-user" style="font-size:0.85rem; padding:8px 14px;" title="Segarkan Data">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                        <button class="btn-success" id="btn-upload-csv-user" style="font-size:0.85rem; padding:8px 16px; background:#10b981; color:white; border-radius:8px; border:none; cursor:pointer;" title="Upload File CSV Data User">
+                            <i class="fas fa-file-csv"></i> Upload CSV User
+                        </button>
+                        <button class="btn-primary" id="btn-tambah-user" style="font-size:0.85rem; padding:8px 16px;">
+                            <i class="fas fa-user-plus"></i> Tambah User Baru
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Filter Bar -->
+                    <div class="user-filter-bar" style="display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px; background:#f8fafc; padding:14px; border-radius:12px; border:1px solid #e2e8f0;">
+                        <div style="flex:2; min-width:200px;">
+                            <div style="position:relative;">
+                                <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#94a3b8;"></i>
+                                <input type="text" id="search-user-text" class="form-control" placeholder="Cari NIP, Nama, Jabatan, atau Unit..." style="padding-left:36px; font-size:0.85rem;">
+                            </div>
+                        </div>
+                        <div style="flex:1; min-width:140px;">
+                            <select id="filter-user-level" class="form-control" style="font-size:0.85rem;">
+                                <option value="">-- Semua Level --</option>
+                                <option value="Super Admin">Super Admin</option>
+                                <option value="Direktur">Direktur</option>
+                                <option value="General Manager">General Manager</option>
+                                <option value="Manager">Manager</option>
+                                <option value="Supervisor">Supervisor</option>
+                                <option value="Tim Leader">Tim Leader</option>
+                                <option value="Staff">Staff / Pelaksana</option>
+                            </select>
+                        </div>
+                        <div style="flex:1; min-width:140px;">
+                            <select id="filter-user-unit" class="form-control" style="font-size:0.85rem;">
+                                <option value="">-- Semua Unit --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Table -->
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover" id="table-manajemen-user" style="font-size:0.85rem; min-width:850px;">
+                            <thead style="background:#1e293b; color:white;">
+                                <tr>
+                                    <th style="width:40px; text-align:center; background:#1e293b; color:white;">NO</th>
+                                    <th style="width:120px; background:#1e293b; color:white;">NIP</th>
+                                    <th style="min-width:160px; background:#1e293b; color:white;">NAMA KARYAWAN</th>
+                                    <th style="width:130px; background:#1e293b; color:white;">LEVEL</th>
+                                    <th style="width:140px; background:#1e293b; color:white;">JABATAN</th>
+                                    <th style="width:120px; background:#1e293b; color:white;">UNIT</th>
+                                    <th style="width:100px; background:#1e293b; color:white;">ATASAN 1</th>
+                                    <th style="width:100px; background:#1e293b; color:white;">ATASAN 2</th>
+                                    <th style="width:110px; text-align:center; background:#1e293b; color:white;">AKSI</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-manajemen-user">
+                                <tr>
+                                    <td colspan="9" class="text-center" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i> Memuat data user dari database...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div id="user-pagination-container" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:16px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:0.85rem; color:#64748b;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Modal Form User (Tambah / Edit Manual) -->
+    <div id="modal-user-form" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center; padding:15px;">
+        <div class="card glass-card" style="width: 100%; max-width:550px; padding: 24px; max-height:90vh; overflow-y:auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h4 id="modal-user-title" class="gradient-text"><i class="fas fa-user-edit"></i> Tambah User Baru</h4>
+                <button class="btn-close" id="btn-close-modal-user" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:#64748b;"><i class="fas fa-times"></i></button>
+            </div>
+            <form id="form-user-data">
+                <input type="hidden" id="user-form-id">
+                <div class="form-group mb-3">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block;">NIP (Nomor Induk Pegawai) *</label>
+                    <input type="text" id="user-input-nip" class="form-control" placeholder="Contoh: 0885.0220.00" required>
+                </div>
+                <div class="form-group mb-3">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block;">Password *</label>
+                    <input type="text" id="user-input-password" class="form-control" placeholder="Isi password atau biarkan default sama dengan NIP">
+                </div>
+                <div class="form-group mb-3">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block;">Nama Lengkap *</label>
+                    <input type="text" id="user-input-nama" class="form-control" placeholder="Nama Karyawan" required>
+                </div>
+                <div class="form-row mb-3" style="display:flex; gap:12px;">
+                    <div style="flex:1;">
+                        <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block;">Level Jabatan *</label>
+                        <select id="user-input-level" class="form-control" required>
+                            <option value="Staff">Staff</option>
+                            <option value="Pelaksana">Pelaksana</option>
+                            <option value="Tim Leader">Tim Leader</option>
+                            <option value="Supervisor">Supervisor</option>
+                            <option value="Manager">Manager</option>
+                            <option value="General Manager">General Manager</option>
+                            <option value="Direktur">Direktur</option>
+                            <option value="Super Admin">Super Admin</option>
+                        </select>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block;">Jabatan *</label>
+                        <input type="text" id="user-input-jabatan" class="form-control" placeholder="Contoh: IT Support" required>
+                    </div>
+                </div>
+                <div class="form-group mb-3">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block;">Unit Kerja / Departemen *</label>
+                    <input type="text" id="user-input-unit" class="form-control" placeholder="Contoh: IT, SDM, Direksi" required>
+                </div>
+                <div class="form-row mb-4" style="display:flex; gap:12px;">
+                    <div style="flex:1;">
+                        <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block;">Atasan 1 (NIP Verifikator 1)</label>
+                        <input type="text" id="user-input-atasan1" class="form-control" placeholder="NIP Atasan Langsung">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-weight:600; font-size:0.85rem; margin-bottom:4px; display:block;">Atasan 2 (NIP Verifikator 2)</label>
+                        <input type="text" id="user-input-atasan2" class="form-control" placeholder="NIP Atasan 2 / GM / Direktur">
+                    </div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button type="button" class="btn-secondary" id="btn-batal-user-form">Batal</button>
+                    <button type="submit" class="btn-primary" id="btn-simpan-user-form"><i class="fas fa-save"></i> Simpan User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Upload CSV User -->
+    <div id="modal-upload-csv-user" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center; padding:15px;">
+        <div class="card glass-card" style="width: 100%; max-width:600px; padding: 24px; max-height:90vh; overflow-y:auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h4 class="gradient-text"><i class="fas fa-file-csv"></i> Upload Data User dari CSV</h4>
+                <button class="btn-close" id="btn-close-modal-csv-user" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:#64748b;"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; padding:12px; border-radius:8px; margin-bottom:16px; font-size:0.85rem; color:#1e40af;">
+                <p style="margin:0 0 6px; font-weight:600;"><i class="fas fa-info-circle"></i> Petunjuk Import CSV User:</p>
+                <ul style="margin:0; padding-left:20px;">
+                    <li>Buka Sheet <strong>Users</strong> di Google Spreadsheet Anda > Klik <strong>File > Download > .csv</strong>.</li>
+                    <li>Pastikan baris pertama (header) berisi: <code>NIP, Password, Nama, Level, Jabatan, Unit, AtasanNIP1 (Atasan1), AtasanNIP2 (Atasan2)</code></li>
+                    <li>NIP yang sudah ada di database akan diperbarui (*upsert*).</li>
+                </ul>
+            </div>
+
+            <div class="form-group mb-4">
+                <label style="font-weight:600; font-size:0.85rem; margin-bottom:6px; display:block;">Pilih File CSV User (*.csv):</label>
+                <input type="file" id="file-input-csv-user" accept=".csv, .txt" class="form-control" style="padding:8px;">
+            </div>
+
+            <div id="csv-user-preview-area" style="display:none; margin-bottom:16px; max-height:180px; overflow-y:auto; border:1px solid #cbd5e1; border-radius:8px; padding:8px; font-size:0.78rem;">
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button type="button" class="btn-secondary" id="btn-batal-csv-user">Batal</button>
+                <button type="button" class="btn-success" id="btn-proses-csv-user" style="background:#10b981; color:white; border:none; padding:8px 18px; border-radius:8px; cursor:pointer;" disabled>
+                    <i class="fas fa-upload"></i> Impor Sekarang ke Supabase
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Upload CSV SKI -->
+    <div id="modal-upload-csv-ski" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center; padding:15px;">
+        <div class="card glass-card" style="width: 100%; max-width:650px; padding: 24px; max-height:90vh; overflow-y:auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h4 class="gradient-text"><i class="fas fa-file-csv"></i> Upload Data Master SKI dari CSV</h4>
+                <button class="btn-close" id="btn-close-modal-csv-ski" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:#64748b;"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div style="background:#ecfdf5; border:1px solid #a7f3d0; padding:12px; border-radius:8px; margin-bottom:16px; font-size:0.85rem; color:#065f46;">
+                <p style="margin:0 0 6px; font-weight:600;"><i class="fas fa-info-circle"></i> Petunjuk Import CSV Master SKI:</p>
+                <ul style="margin:0; padding-left:20px;">
+                    <li>Buka Sheet <strong>SKI</strong> di Google Spreadsheet Anda > Klik <strong>File > Download > .csv</strong>.</li>
+                    <li>Kolom yang akan diimpor: <code>Target Unit, Level Jabatan, Target Jabatan, KPI Departemen, SKI, Target Detail, Kriteria 1..5, Bobot</code>.</li>
+                </ul>
+            </div>
+
+            <div class="form-group mb-4">
+                <label style="font-weight:600; font-size:0.85rem; margin-bottom:6px; display:block;">Pilih File CSV SKI (*.csv):</label>
+                <input type="file" id="file-input-csv-ski" accept=".csv, .txt" class="form-control" style="padding:8px;">
+            </div>
+
+            <div id="csv-ski-preview-area" style="display:none; margin-bottom:16px; max-height:180px; overflow-y:auto; border:1px solid #cbd5e1; border-radius:8px; padding:8px; font-size:0.78rem;">
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button type="button" class="btn-secondary" id="btn-batal-csv-ski">Batal</button>
+                <button type="button" class="btn-success" id="btn-proses-csv-ski" style="background:#10b981; color:white; border:none; padding:8px 18px; border-radius:8px; cursor:pointer;" disabled>
+                    <i class="fas fa-upload"></i> Impor SKI ke Supabase
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
     <script src="app.js"></script>
 </body>

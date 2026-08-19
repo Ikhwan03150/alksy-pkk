@@ -530,15 +530,24 @@ select.form-control { appearance: auto; }
     padding-bottom: 8px;
 }
 .badge {
-    background: var(--primary);
-    color: white;
-    width: 24px; height: 24px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    padding: 4px 10px;
     border-radius: 6px;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    width: auto;
+    height: auto;
+    line-height: 1.2;
 }
+.badge-danger { background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; }
+.badge-primary { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
+.badge-warning { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
+.badge-info { background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc; }
+.badge-secondary { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+.badge-success { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
 
 /* ── Info & Result Boxes ────────────────── */
 .info-box {

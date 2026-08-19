@@ -1,13 +1,7 @@
 // config.js
-// Berisi konfigurasi aplikasi dan URL endpoint Google Apps Script
+// Konfigurasi Utama Aplikasi PKK Alsky - Pure Supabase Backend
 
 const APP_CONFIG = {
-    // Ganti URL ini dengan URL Web App Google Apps Script setelah deploy
-    GAS_URL: "https://script.google.com/macros/s/AKfycbzwK2s67WyHxr0nKkn9TkFX5Jau0dSLGGERTdYOy1RD5hKH_w7vf6tt0xERN9BFWSvSGw/exec",
-
-    // Status apakah menggunakan Mock Data (Jika GAS_URL kosong)
-    USE_MOCK: false,
-
     // Rating Scale untuk Final Grade
     RATING_SCALE: [
         { min: 0, max: 167, grade: "Kurang Sekali", class: "grade-D" },
@@ -27,6 +21,13 @@ const APP_CONFIG = {
         "General Manager": { kpi: 50, perilaku: 30, manajerial: 20 },
         "Direktur": { kpi: 40, perilaku: 30, manajerial: 30 }
     }
+};
+
+// --- Konfigurasi Backend Supabase ---
+const SUPABASE_CONFIG = {
+    USE_SUPABASE: true,
+    URL: "https://uqbmoftfssqqsojzyrrn.supabase.co",
+    ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYm1vZnRmc3NxcXNvanp5cnJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxMTUzNTYsImV4cCI6MjEwMjY5MTM1Nn0.NR08svPgfGCLOlaw1svojNiBTWFa2zIOQTriuh-lx8Y"
 };
 
 // --- MOCK DATA (Digunakan jika GAS_URL kosong) ---

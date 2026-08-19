@@ -8,6 +8,8 @@ let currentAppPage = 'dashboard';
 const MENU_CONFIG = {
     "Super Admin": [
         { id: "dashboard", icon: "fas fa-home", text: "Dasbor" },
+        { id: "manajemen_user", icon: "fas fa-users-cog", text: "Manajemen User" },
+        { id: "daftar_ski", icon: "fas fa-list-alt", text: "Master SKI" },
         { id: "monitoring", icon: "fas fa-desktop", text: "Monitoring PKK" },
         { id: "settings", icon: "fas fa-cog", text: "Setting Bobot" },
         { id: "tahun_ajaran", icon: "fas fa-calendar", text: "Tahun Ajaran" },
@@ -30,6 +32,7 @@ const MENU_CONFIG = {
         { id: "dashboard", icon: "fas fa-home", text: "Dasbor" },
         { id: "daftar_ski", icon: "fas fa-list", text: "SKI" },
         { id: "verifikasi", icon: "fas fa-check-double", text: "Verifikasi PKK" },
+        { id: "monitoring", icon: "fas fa-desktop", text: "Monitoring PKK" },
         { id: "evaluasi", icon: "fas fa-edit", text: "Evaluasi Mandiri" },
         { id: "riwayat", icon: "fas fa-history", text: "Riwayat PKK" },
         { id: "ubah_password", icon: "fas fa-key", text: "Ubah Password" }
@@ -179,38 +182,535 @@ function checkSession() {
     }
 }
 
-// --- API Utility ---
+let supabaseClient = null;
+
+function getSupabaseClient() {
+    if (!supabaseClient && window.supabase && typeof window.supabase.createClient === 'function') {
+        if (typeof SUPABASE_CONFIG !== 'undefined' && SUPABASE_CONFIG.URL && SUPABASE_CONFIG.URL.includes('.supabase.co')) {
+            supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
+        }
+    }
+    return supabaseClient;
+}
+
+async function fetchSupabaseAPI(action, payload = {}) {
+    const sb = getSupabaseClient();
+    if (!sb) return { success: false, message: "Supabase client belum terkonfigurasi. Periksa SUPABASE_CONFIG di config.js" };
+
+    try {
+        if (action === 'login') {
+            const { nip, password } = payload;
+            const targetNip = String(nip || '').trim();
+            const targetPass = String(password || '').trim();
+
+            const { data, error } = await sb.from('users').select('*');
+            if (error) throw error;
+
+            const userList = data || [];
+            const cleanStr = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+            const matched = userList.find(u => {
+                const uNip = String(u.nip || '').trim().toLowerCase();
+                const uPass = String(u.password || '').trim();
+                const rawNip = targetNip.toLowerCase();
+
+                const nipOk = uNip === rawNip || cleanStr(uNip) === cleanStr(targetNip);
+                const passOk = uPass === targetPass || cleanStr(uPass) === cleanStr(targetPass);
+                return nipOk && passOk;
+            });
+
+            if (matched) {
+                return {
+                    success: true,
+                    user: {
+                        nip: matched.nip,
+                        nama: matched.nama,
+                        level: matched.level,
+                        jabatan: matched.jabatan,
+                        unit: matched.unit,
+                        atasan1: matched.atasan1 || '',
+                        atasan2: matched.atasan2 || ''
+                    }
+                };
+            }
+            return { success: false, message: "NIP atau Password salah." };
+        }
+
+        if (action === 'getUsers') {
+            const { data, error } = await sb.from('users').select('*');
+            if (error) throw error;
+            return { success: true, data: data || [] };
+        }
+
+        if (action === 'getTahunAjaran') {
+            const { data, error } = await sb.from('tahun_ajaran').select('*');
+            if (error) throw error;
+            const list = data || [];
+            const activeObj = list.find(t => t.status === 'Aktif');
+            return {
+                success: true,
+                data: list,
+                active: activeObj ? activeObj.tahun : (list[0] ? list[0].tahun : '2025/2026')
+            };
+        }
+
+        if (action === 'getSKIs') {
+            let query = sb.from('skis').select('*');
+            if (payload.createdByNIP) {
+                query = query.eq('created_by_nip', payload.createdByNIP);
+            }
+            const { data, error } = await query;
+            if (error) throw error;
+            
+            const skis = (data || []).map(item => ({
+                id: item.id,
+                createdByNIP: item.created_by_nip,
+                targetUnit: item.target_unit,
+                targetLevel: item.target_level,
+                targetJabatan: item.target_jabatan,
+                kpiDepartemen: item.kpi_departemen,
+                ski: item.ski,
+                targetDetail: item.target_detail,
+                kriteria1: item.kriteria1,
+                kriteria2: item.kriteria2,
+                kriteria3: item.kriteria3,
+                kriteria4: item.kriteria4,
+                kriteria5: item.kriteria5,
+                bobot: item.bobot
+            }));
+            return { success: true, data: skis };
+        }
+
+        if (action === 'saveSKI') {
+            const ski = payload.skiData || {};
+            const row = {
+                created_by_nip: ski.createdByNIP || '',
+                target_unit: ski.targetUnit || '',
+                target_level: ski.targetLevel || '',
+                target_jabatan: ski.targetJabatan || '',
+                kpi_departemen: ski.kpiDepartemen || '',
+                ski: ski.ski || '',
+                target_detail: ski.targetDetail || '',
+                kriteria1: ski.kriteria1 || '',
+                kriteria2: ski.kriteria2 || '',
+                kriteria3: ski.kriteria3 || '',
+                kriteria4: ski.kriteria4 || '',
+                kriteria5: ski.kriteria5 || '',
+                bobot: ski.bobot || 0
+            };
+            if (ski.id && !String(ski.id).startsWith('SKI_')) {
+                const { error } = await sb.from('skis').update(row).eq('id', ski.id);
+                if (error) throw error;
+            } else {
+                const { error } = await sb.from('skis').insert([row]);
+                if (error) throw error;
+            }
+            return { success: true };
+        }
+
+        if (action === 'saveBatchSKI') {
+            const list = payload.skiList || [];
+            if (payload.clearExisting) {
+                const { error: delErr } = await sb.from('skis').delete().neq('id', 0);
+                if (delErr) console.warn("Notice: Clear existing SKIs before re-import:", delErr);
+            }
+
+            const updates = [];
+            const inserts = [];
+
+            list.forEach(ski => {
+                const row = {
+                    created_by_nip: ski.createdByNIP || '',
+                    target_unit: ski.targetUnit || '',
+                    target_level: ski.targetLevel || '',
+                    target_jabatan: ski.targetJabatan || '',
+                    kpi_departemen: ski.kpiDepartemen || '',
+                    ski: ski.ski || '',
+                    target_detail: ski.targetDetail || '',
+                    kriteria1: ski.kriteria1 || '',
+                    kriteria2: ski.kriteria2 || '',
+                    kriteria3: ski.kriteria3 || '',
+                    kriteria4: ski.kriteria4 || '',
+                    kriteria5: ski.kriteria5 || '',
+                    bobot: ski.bobot || 0
+                };
+
+                if (ski.id && !String(ski.id).startsWith('SKI_')) {
+                    row.id = isNaN(parseInt(ski.id)) ? ski.id : parseInt(ski.id);
+                    updates.push(row);
+                } else {
+                    inserts.push(row);
+                }
+            });
+
+            if (updates.length > 0) {
+                const { error: upErr } = await sb.from('skis').upsert(updates, { onConflict: 'id' });
+                if (upErr) throw upErr;
+            }
+
+            if (inserts.length > 0) {
+                const { error: insErr } = await sb.from('skis').insert(inserts);
+                if (insErr) throw insErr;
+            }
+
+            return { success: true };
+        }
+
+        if (action === 'deleteSKI') {
+            let filterId = isNaN(parseInt(payload.id)) ? payload.id : parseInt(payload.id);
+            const { error } = await sb.from('skis').delete().eq('id', filterId);
+            if (error) throw error;
+            return { success: true };
+        }
+
+        if (action === 'getPKKs') {
+            let query = sb.from('pkks').select('*');
+            if (payload.nip) query = query.eq('nip', payload.nip);
+            if (payload.status) query = query.eq('status', payload.status);
+            query = query.order('id', { ascending: false });
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            const pkks = (data || []).map(p => {
+                const evalData = (typeof p.evaluasi_data === 'string' ? JSON.parse(p.evaluasi_data) : p.evaluasi_data) || {};
+                return {
+                    id: p.id,
+                    nip: p.nip,
+                    nama: p.nama,
+                    unit: p.unit,
+                    tahunAjaran: p.tahun_ajaran,
+                    finalScore: p.final_score,
+                    finalGrade: p.final_grade,
+                    status: p.status,
+                    tanggal: p.tanggal,
+                    evaluasiData: evalData,
+                    verifikasi1Data: p.verifikasi1_data,
+                    verifikasi2Data: p.verifikasi2_data,
+                    p_kualitas_hasil_kerja: evalData.p_kualitas_hasil_kerja,
+                    p_ketepatan_waktu: evalData.p_ketepatan_waktu,
+                    p_keterampilan_kerja: evalData.p_keterampilan_kerja,
+                    p_kerjasama: evalData.p_kerjasama,
+                    p_disiplin: evalData.p_disiplin,
+                    p_inisiatif: evalData.p_inisiatif,
+                    p_peningkatan_tanggung_jawab: evalData.p_peningkatan_tanggung_jawab,
+                    p_ahlak_islami: evalData.p_ahlak_islami,
+                    p_adaptasi_terhadap_perubahan: evalData.p_adaptasi_terhadap_perubahan,
+                    m_planning_organizing: evalData.m_planning_organizing,
+                    m_controlling: evalData.m_controlling,
+                    m_analytical_thinking: evalData.m_analytical_thinking,
+                    m_decision_making: evalData.m_decision_making,
+                    m_developing_others: evalData.m_developing_others,
+                    rekomendasiPerbaikan: evalData.rekomendasiPerbaikan,
+                    rekomendasiAkhir: evalData.rekomendasiAkhir,
+                    skiAnswers: evalData.skiAnswers,
+                    keteranganPerbaikan: evalData.keteranganPerbaikan,
+                    alasanKeputusan: evalData.alasanKeputusan,
+                    atasanNIP1: evalData.atasanNIP1,
+                    atasanNIP2: evalData.atasanNIP2
+                };
+            });
+            return { success: true, data: pkks };
+        }
+
+        if (action === 'savePKK') {
+            const pkk = payload.pkkData || {};
+
+            const evaluasiObj = (pkk.evaluasiData && Object.keys(pkk.evaluasiData).length > 0) ? pkk.evaluasiData : {
+                p_kualitas_hasil_kerja: pkk.p_kualitas_hasil_kerja,
+                p_ketepatan_waktu: pkk.p_ketepatan_waktu,
+                p_keterampilan_kerja: pkk.p_keterampilan_kerja,
+                p_kerjasama: pkk.p_kerjasama,
+                p_disiplin: pkk.p_disiplin,
+                p_inisiatif: pkk.p_inisiatif,
+                p_peningkatan_tanggung_jawab: pkk.p_peningkatan_tanggung_jawab,
+                p_ahlak_islami: pkk.p_ahlak_islami,
+                p_adaptasi_terhadap_perubahan: pkk.p_adaptasi_terhadap_perubahan,
+                m_planning_organizing: pkk.m_planning_organizing,
+                m_controlling: pkk.m_controlling,
+                m_analytical_thinking: pkk.m_analytical_thinking,
+                m_decision_making: pkk.m_decision_making,
+                m_developing_others: pkk.m_developing_others,
+                rekomendasiPerbaikan: pkk.rekomendasiPerbaikan,
+                rekomendasiAkhir: pkk.rekomendasiAkhir,
+                skiAnswers: pkk.skiAnswers,
+                keteranganPerbaikan: pkk.keteranganPerbaikan,
+                alasanKeputusan: pkk.alasanKeputusan,
+                atasanNIP1: pkk.atasanNIP1,
+                atasanNIP2: pkk.atasanNIP2
+            };
+
+            const row = {
+                nip: pkk.nip || '',
+                nama: pkk.nama || '',
+                unit: pkk.unit || '',
+                tahun_ajaran: pkk.tahunAjaran || '2025/2026',
+                final_score: pkk.finalScore || 0,
+                final_grade: pkk.finalGrade || '-',
+                status: pkk.status || 'Draft',
+                tanggal: pkk.tanggal || new Date().toISOString().split('T')[0],
+                evaluasi_data: evaluasiObj,
+                verifikasi1_data: pkk.verifikasi1Data || {},
+                verifikasi2_data: pkk.verifikasi2Data || {}
+            };
+
+            let savedId = pkk.id;
+            if (pkk.id && !String(pkk.id).startsWith('PKK_')) {
+                const filterId = isNaN(parseInt(pkk.id)) ? pkk.id : parseInt(pkk.id);
+                const { error } = await sb.from('pkks').update(row).eq('id', filterId);
+                if (error) throw error;
+            } else {
+                const { data: existing } = await sb.from('pkks').select('id').eq('nip', pkk.nip).order('id', { ascending: false });
+                if (existing && existing.length > 0) {
+                    savedId = existing[0].id;
+                    const { error } = await sb.from('pkks').update(row).eq('id', savedId);
+                    if (error) throw error;
+                } else {
+                    const { data: insData, error } = await sb.from('pkks').insert([row]).select();
+                    if (error) throw error;
+                    if (insData && insData.length > 0) savedId = insData[0].id;
+                }
+            }
+            return { success: true, id: savedId, message: `Evaluasi Mandiri berhasil disimpan dengan status ${pkk.status || 'Draft'}.` };
+        }
+
+        if (action === 'getBobot') {
+            const local = getLocalCache('pkk_bobot_matrix_cache');
+            if (local && Array.isArray(local) && local.length > 0) {
+                return { success: true, data: local };
+            }
+            try {
+                const { data } = await sb.from('bobot').select('*').eq('jabatan', 'setting_matrix');
+                if (data && data.length > 0 && data[0].kpi) {
+                    let parsed = typeof data[0].kpi === 'string' ? JSON.parse(data[0].kpi) : data[0].kpi;
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        setLocalCache('pkk_bobot_matrix_cache', parsed);
+                        return { success: true, data: parsed };
+                    }
+                }
+            } catch (e) {
+                console.warn("Notice: Fetching bobot matrix fallback:", e);
+            }
+            return { success: true, data: DEFAULT_BOBOT_MATRIX };
+        }
+
+        if (action === 'saveBobot') {
+            const matrix = payload.bobotData || [];
+            setLocalCache('pkk_bobot_matrix_cache', matrix);
+            try {
+                const { data: existing } = await sb.from('bobot').select('id').eq('jabatan', 'setting_matrix');
+                if (existing && existing.length > 0) {
+                    await sb.from('bobot').update({ kpi: JSON.stringify(matrix) }).eq('id', existing[0].id);
+                } else {
+                    await sb.from('bobot').insert([{ jabatan: 'setting_matrix', kpi: 0 }]);
+                }
+            } catch (e) {
+                console.warn("Notice: Saved bobot matrix locally:", e);
+            }
+            return { success: true };
+        }
+
+        if (action === 'saveUser') {
+            const u = payload.userData || {};
+            const row = {
+                nip: String(u.nip || '').trim(),
+                password: String(u.password || u.nip || '').trim(),
+                nama: String(u.nama || '').trim(),
+                level: String(u.level || 'Staff').trim(),
+                jabatan: String(u.jabatan || '').trim(),
+                unit: String(u.unit || '').trim(),
+                atasan1: String(u.atasan1 || '').trim(),
+                atasan2: String(u.atasan2 || '').trim()
+            };
+            const { error } = await sb.from('users').upsert([row], { onConflict: 'nip' });
+            if (error) throw error;
+            return { success: true };
+        }
+
+        if (action === 'saveBatchUsers') {
+            const list = payload.userList || [];
+            const rows = list.map(u => ({
+                nip: String(u.nip || '').trim(),
+                password: String(u.password || u.nip || '').trim(),
+                nama: String(u.nama || '').trim(),
+                level: String(u.level || 'Staff').trim(),
+                jabatan: String(u.jabatan || '').trim(),
+                unit: String(u.unit || '').trim(),
+                atasan1: String(u.atasan1 || '').trim(),
+                atasan2: String(u.atasan2 || '').trim()
+            })).filter(u => u.nip.length > 0);
+
+            const { error } = await sb.from('users').upsert(rows, { onConflict: 'nip' });
+            if (error) throw error;
+            return { success: true };
+        }
+
+        if (action === 'deleteUser') {
+            const { error } = await sb.from('users').delete().eq('nip', payload.nip);
+            if (error) throw error;
+            return { success: true };
+        }
+
+        if (action === 'getDashboard' || action === 'getPengumuman') {
+            const { data, error } = await sb.from('pengumuman').select('*').order('id', { ascending: false });
+            if (error) throw error;
+            const list = (data || []).map(p => ({
+                id: p.id,
+                judul: p.judul,
+                deskripsi: p.deskripsi,
+                tanggal: p.tanggal || (p.created_at ? p.created_at.split('T')[0] : '')
+            }));
+            return { success: true, pengumuman: list, data: list };
+        }
+
+        if (action === 'savePengumuman') {
+            const p = payload.pengumuman || {};
+            const row = {
+                judul: String(p.judul || '').trim(),
+                deskripsi: String(p.deskripsi || '').trim(),
+                tanggal: p.tanggal || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+            };
+
+            if (p.id && !isNaN(parseInt(p.id))) {
+                const { error } = await sb.from('pengumuman').update(row).eq('id', parseInt(p.id));
+                if (error) throw error;
+            } else {
+                const { error } = await sb.from('pengumuman').insert([row]);
+                if (error) throw error;
+            }
+            return { success: true, message: "Pengumuman berhasil disimpan!" };
+        }
+
+        if (action === 'getTahunAjaran') {
+            const { data, error } = await sb.from('tahun_ajaran').select('*').order('id', { ascending: true });
+            if (error) throw error;
+            let list = (data || []).map(t => ({
+                id: String(t.id),
+                tahun: t.tahun,
+                status: t.status || 'Tidak Aktif'
+            }));
+
+            if (list.length === 0) {
+                try {
+                    const seedRows = [
+                        { tahun: '2024/2025', status: 'Tidak Aktif' },
+                        { tahun: '2025/2026', status: 'Aktif' }
+                    ];
+                    const { data: seedData } = await sb.from('tahun_ajaran').insert(seedRows).select();
+                    if (seedData && seedData.length > 0) {
+                        list = seedData.map(t => ({
+                            id: String(t.id),
+                            tahun: t.tahun,
+                            status: t.status || 'Tidak Aktif'
+                        }));
+                    }
+                } catch (e) {
+                    console.warn("Notice: Tahun Ajaran auto seed fallback:", e);
+                    list = [
+                        { id: '1', tahun: '2024/2025', status: 'Tidak Aktif' },
+                        { id: '2', tahun: '2025/2026', status: 'Aktif' }
+                    ];
+                }
+            }
+
+            const activeObj = list.find(t => t.status === 'Aktif');
+            const activeYear = activeObj ? activeObj.tahun : (list.length > 0 ? list[list.length - 1].tahun : '2025/2026');
+
+            return { success: true, data: list, active: activeYear };
+        }
+
+        if (action === 'addTahunAjaran') {
+            const tahun = String(payload.tahun || '').trim();
+            if (!tahun) throw new Error("Tahun Ajaran tidak boleh kosong");
+            const { error } = await sb.from('tahun_ajaran').insert([{ tahun: tahun, status: 'Tidak Aktif' }]);
+            if (error) throw error;
+            return { success: true, message: `Tahun Ajaran ${tahun} berhasil ditambahkan!` };
+        }
+
+        if (action === 'setAktifTahunAjaran') {
+            const targetId = payload.id;
+            const { error: resetErr } = await sb.from('tahun_ajaran').update({ status: 'Tidak Aktif' }).neq('id', 0);
+            if (resetErr) console.warn("Reset TA status notice:", resetErr);
+
+            let filterVal = isNaN(parseInt(targetId)) ? targetId : parseInt(targetId);
+            const { error: actErr } = await sb.from('tahun_ajaran').update({ status: 'Aktif' }).eq('id', filterVal);
+            if (actErr) throw actErr;
+
+            return { success: true, message: "Tahun Ajaran berhasil diaktifkan!" };
+        }
+
+        if (action === 'changePassword') {
+            const nip = String(payload.nip || '').trim();
+            const oldPassword = String(payload.oldPassword || '').trim();
+            const newPassword = String(payload.newPassword || '').trim();
+
+            if (!nip) throw new Error("NIP tidak ditemukan");
+            if (!newPassword) throw new Error("Password baru tidak boleh kosong");
+
+            const { data: userRows, error: findErr } = await sb.from('users').select('*').eq('nip', nip);
+            if (findErr || !userRows || userRows.length === 0) {
+                return { success: false, message: "User tidak ditemukan di database." };
+            }
+
+            const dbUser = userRows[0];
+            if (dbUser.password && dbUser.password !== oldPassword) {
+                return { success: false, message: "Password lama tidak sesuai!" };
+            }
+
+            const { error: updateErr } = await sb.from('users').update({ password: newPassword }).eq('nip', nip);
+            if (updateErr) throw updateErr;
+
+            return { success: true, message: "Password berhasil diubah!" };
+        }
+
+        return { success: false, message: "Action Supabase belum didukung." };
+    } catch (err) {
+        console.error("Supabase API Error:", err);
+        return { success: false, message: err.message || "Error Supabase API" };
+    }
+}
+
 async function fetchGasAPI(action, payload = {}) {
     if (APP_CONFIG.USE_MOCK) {
-        return new Promise(resolve => setTimeout(() => resolve({ success: true }), 500)); // Simulasi delay mock
+        return new Promise(resolve => setTimeout(() => resolve({ success: true }), 300));
     }
+    return fetchSupabaseAPI(action, payload);
+}
 
-    payload.action = action;
+let isDatabaseConnected = false;
+
+async function connectDatabaseWarmup() {
+    const btn = document.getElementById('btn-login');
+    if (!btn) return;
+
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Menghubungkan ke Supabase...';
+    btn.disabled = true;
+
     try {
-        const response = await fetch(APP_CONFIG.GAS_URL, {
-            method: 'POST',
-            body: JSON.stringify(payload),
-            headers: {
-                'Content-Type': 'text/plain;charset=utf-8',
-            }
-        });
-        const result = await response.json();
-        return result;
-    } catch (error) {
-        console.error("API Error:", error);
-        return { success: false, message: "Terjadi kesalahan koneksi ke server." };
+        await fetchSupabaseAPI('getTahunAjaran');
+        setDatabaseConnectedState(true);
+    } catch (e) {
+        setDatabaseConnectedState(true);
+    }
+}
+
+function setDatabaseConnectedState(connected) {
+    isDatabaseConnected = connected;
+    const btn = document.getElementById('btn-login');
+    if (btn) {
+        btn.innerHTML = 'Masuk <i class="fas fa-arrow-right ml-1"></i>';
+        btn.disabled = false;
     }
 }
 
 async function doLogin(nip, password) {
     const btn = document.getElementById('btn-login');
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Memverifikasi...';
     btn.disabled = true;
 
     if (APP_CONFIG.USE_MOCK) {
-        await fetchGasAPI('login');
-        const user = MOCK_DB.users.find(u => u.nip === nip && u.password === password);
+        const user = MOCK_DB.users.find(u => String(u.nip).trim() === String(nip).trim() && String(u.password).trim() === String(password).trim());
         if (user) {
             currentUser = user;
             localStorage.setItem('pkk_user', JSON.stringify(user));
@@ -231,7 +731,7 @@ async function doLogin(nip, password) {
         }
     }
 
-    btn.innerHTML = originalText;
+    btn.innerHTML = 'Masuk <i class="fas fa-arrow-right ml-1"></i>';
     btn.disabled = false;
 }
 
@@ -248,6 +748,38 @@ function showLoginScreen() {
     elLoginScreen.classList.add('active');
     document.getElementById('login-nip').value = '';
     document.getElementById('login-password').value = '';
+    
+    // Warm up & connect to database before user clicks login
+    connectDatabaseWarmup();
+}
+
+// --- Helper LocalStorage Cache System ---
+function getLocalCache(key) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && parsed.data ? parsed.data : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function setLocalCache(key, data) {
+    try {
+        localStorage.setItem(key, JSON.stringify({
+            timestamp: Date.now(),
+            data: data
+        }));
+    } catch (e) {
+        console.warn("LocalStorage caching limit reached:", e);
+    }
+}
+
+function clearLocalCache(key) {
+    try {
+        localStorage.removeItem(key);
+    } catch (e) {}
 }
 
 // --- Global Data Cache System ---
@@ -263,6 +795,22 @@ let _isTahunCacheLoaded = false;
 
 async function loadUsersData(forceRefresh = false) {
     if (_isUsersCacheLoaded && !forceRefresh) return _allUsersCache;
+
+    if (!forceRefresh && _allUsersCache.length === 0) {
+        const local = getLocalCache('pkk_users_cache');
+        if (local && Array.isArray(local) && local.length > 0) {
+            _allUsersCache = local;
+            _isUsersCacheLoaded = true;
+            fetchGasAPI('getUsers').then(res => {
+                if (res && res.success && Array.isArray(res.data)) {
+                    _allUsersCache = res.data;
+                    setLocalCache('pkk_users_cache', res.data);
+                }
+            }).catch(() => {});
+            return _allUsersCache;
+        }
+    }
+
     if (APP_CONFIG.USE_MOCK) {
         _allUsersCache = MOCK_DB.users || [];
         _isUsersCacheLoaded = true;
@@ -271,6 +819,7 @@ async function loadUsersData(forceRefresh = false) {
         if (res && res.success) {
             _allUsersCache = res.data || [];
             _isUsersCacheLoaded = true;
+            setLocalCache('pkk_users_cache', _allUsersCache);
         }
     }
     return _allUsersCache;
@@ -278,6 +827,22 @@ async function loadUsersData(forceRefresh = false) {
 
 async function loadPkksData(forceRefresh = false) {
     if (_isPkksCacheLoaded && !forceRefresh) return _allPkksCache;
+
+    if (!forceRefresh && _allPkksCache.length === 0) {
+        const local = getLocalCache('pkk_pkks_cache');
+        if (local && Array.isArray(local) && local.length > 0) {
+            _allPkksCache = local;
+            _isPkksCacheLoaded = true;
+            fetchGasAPI('getPKKs').then(res => {
+                if (res && res.success && Array.isArray(res.data)) {
+                    _allPkksCache = res.data;
+                    setLocalCache('pkk_pkks_cache', res.data);
+                }
+            }).catch(() => {});
+            return _allPkksCache;
+        }
+    }
+
     if (APP_CONFIG.USE_MOCK) {
         _allPkksCache = MOCK_DB.pkks || [];
         _isPkksCacheLoaded = true;
@@ -286,6 +851,7 @@ async function loadPkksData(forceRefresh = false) {
         if (res && res.success) {
             _allPkksCache = res.data || [];
             _isPkksCacheLoaded = true;
+            setLocalCache('pkk_pkks_cache', _allPkksCache);
         }
     }
     return _allPkksCache;
@@ -293,6 +859,24 @@ async function loadPkksData(forceRefresh = false) {
 
 async function loadTahunAjaranData(forceRefresh = false) {
     if (_isTahunCacheLoaded && !forceRefresh) return { active: _activeTahunCache, list: _allTahunCache };
+
+    if (!forceRefresh && _allTahunCache.length === 0) {
+        const local = getLocalCache('pkk_ta_cache');
+        if (local && local.list && Array.isArray(local.list) && local.list.length > 0) {
+            _activeTahunCache = local.active || _activeTahunCache;
+            _allTahunCache = local.list;
+            _isTahunCacheLoaded = true;
+            fetchGasAPI('getTahunAjaran').then(res => {
+                if (res && res.success) {
+                    _activeTahunCache = res.active || _activeTahunCache;
+                    _allTahunCache = res.data || [];
+                    setLocalCache('pkk_ta_cache', { active: _activeTahunCache, list: _allTahunCache });
+                }
+            }).catch(() => {});
+            return { active: _activeTahunCache, list: _allTahunCache };
+        }
+    }
+
     if (APP_CONFIG.USE_MOCK) {
         _activeTahunCache = '2025/2026';
         _allTahunCache = [{ id: 'TA1', tahun: '2025/2026', status: 'Aktif' }];
@@ -303,6 +887,7 @@ async function loadTahunAjaranData(forceRefresh = false) {
             _activeTahunCache = res.active || _activeTahunCache;
             _allTahunCache = res.data || [];
             _isTahunCacheLoaded = true;
+            setLocalCache('pkk_ta_cache', { active: _activeTahunCache, list: _allTahunCache });
         }
     }
     return { active: _activeTahunCache, list: _allTahunCache };
@@ -380,6 +965,7 @@ function showToast(message, type = 'success') {
 
 const SHORT_MENU_TEXT = {
     "dashboard": "Dasbor",
+    "manajemen_user": "User",
     "monitoring": "Monitoring",
     "settings": "Settings",
     "tahun_ajaran": "Periode",
@@ -438,6 +1024,11 @@ function renderSidebar() {
 function navigate(pageId) {
     currentAppPage = pageId;
 
+    if (pageId !== 'evaluasi') {
+        window.reviewTargetPkk = null;
+        window.isViewOnlyMode = false;
+    }
+
     // Update Active State Desktop Sidebar
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => {
         el.classList.remove('active');
@@ -470,6 +1061,7 @@ function renderPage(pageId) {
 
         // Execute Page Specific Logic
         if (pageId === 'dashboard') initDashboard();
+        if (pageId === 'manajemen_user') initManajemenUser();
         if (pageId === 'evaluasi') initEvaluasiMandiri();
         if (pageId === 'verifikasi') initVerifikasi();
         if (pageId === 'ubah_password') initUbahPassword();
@@ -931,13 +1523,34 @@ function renderTopEmployeesChart() {
     `;
 }
 
+function checkHasAtasan1(userOrPkk) {
+    if (!userOrPkk) return false;
+    const val = String(userOrPkk.atasanNIP1 || userOrPkk.atasan1 || '').trim();
+    if (!val || val === '-' || val === '0' || val.toLowerCase() === 'null' || val.toLowerCase() === 'undefined') {
+        return false;
+    }
+    return true;
+}
+
+function checkHasAtasan2(userOrPkk) {
+    if (!userOrPkk) return false;
+    const val = String(userOrPkk.atasanNIP2 || userOrPkk.atasan2 || '').trim();
+    if (!val || val === '-' || val === '0' || val.toLowerCase() === 'null' || val.toLowerCase() === 'undefined') {
+        return false;
+    }
+    return true;
+}
+
 // --- Page: Evaluasi Mandiri (PKK Form) ---
 let currentKpiItems = [];
 async function initEvaluasiMandiri() {
-    const isReviewMode = window.reviewTargetPkk != null;
+    const isTargetPkkPresent = window.reviewTargetPkk != null;
+    const targetPkkStatus = window.reviewTargetPkk ? window.reviewTargetPkk.status : null;
+    const isViewOnlyMode = window.isViewOnlyMode || (targetPkkStatus === 'Selesai');
+    const isReviewMode = isTargetPkkPresent && !isViewOnlyMode;
     let targetUser = currentUser;
 
-    if (isReviewMode) {
+    if (isTargetPkkPresent) {
         targetUser = {
             nip: window.reviewTargetPkk.nip,
             nama: window.reviewTargetPkk.nama,
@@ -945,6 +1558,8 @@ async function initEvaluasiMandiri() {
             unit: window.reviewTargetPkk.unit || '',
             atasanNIP1: window.reviewTargetPkk.atasanNIP1 || '',
             atasanNIP2: window.reviewTargetPkk.atasanNIP2 || '',
+            atasan1: window.reviewTargetPkk.atasan1 || '',
+            atasan2: window.reviewTargetPkk.atasan2 || '',
             id: window.reviewTargetPkk.id,
             jabatan: '-'
         };
@@ -955,24 +1570,28 @@ async function initEvaluasiMandiri() {
                 targetUser.jabatan = found.jabatan || targetUser.jabatan;
                 if (found.level) targetUser.level = found.level;
                 if (found.unit) targetUser.unit = found.unit;
+                targetUser.atasan1 = found.atasan1 || targetUser.atasan1;
+                targetUser.atasan2 = found.atasan2 || targetUser.atasan2;
+                targetUser.atasanNIP1 = found.atasan1 || targetUser.atasanNIP1;
+                targetUser.atasanNIP2 = found.atasan2 || targetUser.atasanNIP2;
             }
         }
     }
 
-    // Render Employee Detail Header Card if in Review Mode
+    // Render Employee Detail Header Card if in Review or View Only Mode
     const detailCardEl = document.getElementById('review-employee-detail-card');
     if (detailCardEl) {
-        if (isReviewMode) {
+        if (isTargetPkkPresent) {
             detailCardEl.style.display = 'block';
             detailCardEl.innerHTML = `
                 <div class="card glass-card" style="background: linear-gradient(135deg, #036F3E 0%, #024f2c 100%); color: white; border-radius: 16px; padding: 18px 24px; box-shadow: 0 10px 25px rgba(3,111,62,0.25);">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
                         <div style="display: flex; align-items: center; gap: 16px;">
                             <div style="width: 52px; height: 52px; border-radius: 14px; background: rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0;">
-                                <i class="fas fa-user-check"></i>
+                                <i class="fas ${isViewOnlyMode ? 'fa-file-signature' : 'fa-user-check'}"></i>
                             </div>
                             <div>
-                                <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.8); font-weight: 600;">Verifikasi PKK Karyawan</div>
+                                <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.8); font-weight: 600;">${isViewOnlyMode ? 'Data Penilaian Karyawan (Lihat)' : 'Verifikasi PKK Karyawan'}</div>
                                 <h3 style="margin: 2px 0 0 0; font-size: 1.35rem; font-weight: 700; color: white;">${targetUser.nama || '-'}</h3>
                                 <div style="font-size: 0.88rem; color: rgba(255,255,255,0.9); margin-top: 2px;">NIP: <strong>${targetUser.nip || '-'}</strong> &bull; ${targetUser.jabatan || '-'}</div>
                             </div>
@@ -984,8 +1603,8 @@ async function initEvaluasiMandiri() {
                             <div style="background: rgba(255,255,255,0.18); color: white; padding: 6px 14px; border-radius: 20px; font-size: 0.82rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,0.25); white-space: nowrap;">
                                 <i class="fas fa-layer-group" style="font-size:0.8rem; opacity:0.9;"></i> Level: ${targetUser.level || '-'}
                             </div>
-                            <div style="background: #F77604; color: white; padding: 6px 16px; border-radius: 20px; font-size: 0.82rem; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(247,118,4,0.35); white-space: nowrap;">
-                                <i class="fas fa-clock" style="font-size:0.8rem;"></i> ${window.reviewTargetPkk ? window.reviewTargetPkk.status : 'Menunggu Verifikasi'}
+                            <div style="background: ${targetPkkStatus === 'Selesai' ? '#036F3E' : '#F77604'}; color: white; padding: 6px 16px; border-radius: 20px; font-size: 0.82rem; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); white-space: nowrap;">
+                                <i class="fas ${targetPkkStatus === 'Selesai' ? 'fa-check-circle' : 'fa-clock'}" style="font-size:0.8rem;"></i> ${targetPkkStatus || 'Menunggu Verifikasi'}
                             </div>
                         </div>
                     </div>
@@ -1165,16 +1784,33 @@ async function initEvaluasiMandiri() {
 
         setTimeout(() => calculatePkk(), 300);
 
-        if (!isReviewMode && existingPkk.status !== 'Draft') {
-            disableFormPkk();
-        }
     }
 
     const formEl = document.getElementById('form-pkk');
     const btnSubmit = document.getElementById('btn-submit-pkk');
     const btnDraft = document.getElementById('btn-save-draft');
 
-    if (isReviewMode) {
+    if (isViewOnlyMode) {
+        if (existingPkk) {
+            const hasRekomendasi = existingPkk.rekomendasiPerbaikan || existingPkk.rekomendasiAkhir || existingPkk.keteranganPerbaikan || existingPkk.alasanKeputusan;
+            if (hasRekomendasi) {
+                document.getElementById('section-rekomendasi').style.display = 'block';
+                const elJenis = document.getElementById('input-jenis-perbaikan');
+                const elKet = document.getElementById('input-keterangan-perbaikan');
+                const elKep = document.getElementById('input-keputusan-akhir');
+                const elAla = document.getElementById('input-alasan-keputusan');
+                if (elJenis) elJenis.value = existingPkk.rekomendasiPerbaikan || '';
+                if (elKet) elKet.value = existingPkk.keteranganPerbaikan || '';
+                if (elKep) elKep.value = existingPkk.rekomendasiAkhir || '';
+                if (elAla) elAla.value = existingPkk.alasanKeputusan || '';
+            } else {
+                document.getElementById('section-rekomendasi').style.display = 'none';
+            }
+        }
+        if (btnDraft) btnDraft.style.display = 'none';
+        if (btnSubmit) btnSubmit.style.display = 'none';
+        disableFormPkk();
+    } else if (isReviewMode) {
         document.getElementById('section-rekomendasi').style.display = 'block';
         if (existingPkk) {
             const elJenis = document.getElementById('input-jenis-perbaikan');
@@ -1189,14 +1825,22 @@ async function initEvaluasiMandiri() {
 
         if (btnDraft) btnDraft.style.display = 'none';
         if (btnSubmit) {
+            btnSubmit.style.display = 'inline-block';
             btnSubmit.innerHTML = 'Verifikasi & Simpan <i class="fas fa-check"></i>';
             btnSubmit.className = 'btn-primary';
         }
     } else {
         document.getElementById('section-rekomendasi').style.display = 'none';
-        if (btnDraft) btnDraft.style.display = 'inline-block';
-        if (btnSubmit) {
-            btnSubmit.innerHTML = 'Ajukan Penilaian <i class="fas fa-paper-plane"></i>';
+        if (existingPkk && existingPkk.status !== 'Draft') {
+            disableFormPkk();
+            if (btnDraft) btnDraft.style.display = 'none';
+            if (btnSubmit) btnSubmit.style.display = 'none';
+        } else {
+            if (btnDraft) btnDraft.style.display = 'inline-block';
+            if (btnSubmit) {
+                btnSubmit.style.display = 'inline-block';
+                btnSubmit.innerHTML = 'Ajukan Penilaian <i class="fas fa-paper-plane"></i>';
+            }
         }
     }
 
@@ -1205,18 +1849,20 @@ async function initEvaluasiMandiri() {
             e.preventDefault();
             
             if (isReviewMode) {
+                const hasAtasan2 = checkHasAtasan2(targetUser);
                 let nextStatus = 'Selesai';
-                const hasAtasan2 = !!(targetUser.atasanNIP2 || targetUser.atasan2);
 
-                if (existingPkk && existingPkk.status === 'Menunggu Verifikasi 1') {
+                if (existingPkk && (existingPkk.status === 'Menunggu Verifikasi 1' || existingPkk.status.includes('Verifikasi 1'))) {
                     nextStatus = hasAtasan2 ? 'Menunggu Verifikasi 2' : 'Selesai';
-                } else if (existingPkk && existingPkk.status === 'Menunggu Verifikasi 2') {
+                } else if (existingPkk && (existingPkk.status === 'Menunggu Verifikasi 2' || existingPkk.status.includes('Verifikasi 2'))) {
                     nextStatus = 'Selesai';
                 }
 
                 submitPkk(nextStatus);
             } else {
-                submitPkk('Menunggu Verifikasi 1');
+                const hasAtasan1 = checkHasAtasan1(currentUser);
+                const initStatus = hasAtasan1 ? 'Menunggu Verifikasi 1' : 'Selesai';
+                submitPkk(initStatus);
             }
         };
     }
@@ -1454,6 +2100,7 @@ async function submitPkk(status) {
     if (btnSubmit) btnSubmit.innerHTML = oldText;
 
     if (res && res.success) {
+        if (res.id) window.currentActivePkkId = res.id;
         document.getElementById('form-pkk-status').innerText = status;
         document.getElementById('form-pkk-status').className = 'status-badge ' + (status === 'Draft' ? 'status-draft' : 'status-pending');
         showToast(res.message || `Formulir berhasil diajukan dengan status: ${status}`, 'success');
@@ -1482,7 +2129,14 @@ function disableFormPkk() {
 // --- Page: Verifikasi ---
 async function initVerifikasi() {
     const tbody = document.getElementById('tbody-verifikasi');
+    if (!tbody) return;
     tbody.innerHTML = `<tr><td colspan="7" class="text-center"><i class="fas fa-spinner fa-spin"></i> Memuat data verifikasi...</td></tr>`;
+
+    let usersList = _skiUserData || [];
+    if (!usersList.length) {
+        usersList = await loadUsersData();
+        _skiUserData = usersList || [];
+    }
 
     let list = [];
     if (APP_CONFIG.USE_MOCK) {
@@ -1497,9 +2151,10 @@ async function initVerifikasi() {
                 // Hanya tampilkan jika login sebagai atasan yang berwenang di tahap tersebut
                 if (p.status === 'Menunggu Verifikasi 1' && p.atasanNIP1 == currentUser.nip) return true;
                 if (p.status === 'Menunggu Verifikasi 2' && p.atasanNIP2 == currentUser.nip) return true;
-                
-                // Super Admin atau level tinggi tertentu mungkin bisa mem-bypass jika diperlukan,
-                // tapi standar rule-nya harus sesuai NIP
+
+                // Super Admin atau General Manager juga bisa melihat pengajuan jika belum terfilter
+                if (['Super Admin', 'General Manager', 'Direktur'].includes(currentUser.level)) return true;
+
                 return false;
             });
         } else {
@@ -1513,30 +2168,41 @@ async function initVerifikasi() {
         return;
     }
 
-    tbody.innerHTML = list.map(p => `
-        <tr>
-            <td>${p.tahunAjaran || '-'}</td>
-            <td>${p.nip}</td>
-            <td>${p.nama}</td>
-            <td>${p.unit}</td>
-            <td>${p.finalScore || 0} (${p.finalGrade || '-'})</td>
-            <td><span class="status-badge status-pending">${p.status}</span></td>
-            <td>
-                <button class="btn-primary" style="padding: 5px 10px; font-size:0.8rem;" onclick="reviewPKK('${p.nip}')">Review</button>
-            </td>
-        </tr>
-    `).join('');
+    tbody.innerHTML = list.map((p, idx) => {
+        const uObj = (usersList || []).find(u => String(u.nip).trim() === String(p.nip).trim());
+        const jabatan = p.jabatan || (uObj ? uObj.jabatan : '-');
+        return `
+            <tr>
+                <td style="text-align:center; font-weight:600;">${idx + 1}</td>
+                <td><strong style="color:#1e293b;">${jabatan}</strong></td>
+                <td>${p.nama}</td>
+                <td><span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:10px; font-weight:600; font-size:0.8rem;">${p.unit}</span></td>
+                <td><strong>${p.finalScore || 0}</strong> <span style="color:#64748b; font-size:0.82rem;">(${p.finalGrade || '-'})</span></td>
+                <td><span class="status-badge status-pending">${p.status}</span></td>
+                <td>
+                    <button class="btn-primary" style="padding: 5px 12px; font-size:0.8rem; font-weight:600;" onclick="reviewPKK('${p.nip}')">Review</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
 }
 
 window.reviewTargetPkk = null;
+window.isViewOnlyMode = false;
+
 async function reviewPKK(nip) {
     const res = await fetchGasAPI('getPKKs', { nip: nip });
     if (res && res.success && res.data && res.data.length > 0) {
         window.reviewTargetPkk = res.data[0];
+        window.isViewOnlyMode = (res.data[0].status === 'Selesai');
         navigate('evaluasi');
     } else {
         showToast('Gagal memuat data pengajuan.', 'error');
     }
+}
+
+async function viewPKK(nip) {
+    viewPKKPreview(nip);
 }
 
 // --- Page: Riwayat ---
@@ -1544,6 +2210,12 @@ async function initRiwayat() {
     const tbody = document.getElementById('tbody-riwayat');
     if (!tbody) return;
     tbody.innerHTML = `<tr><td colspan="7" class="text-center"><i class="fas fa-spinner fa-spin"></i> Memuat riwayat...</td></tr>`;
+
+    let usersList = _skiUserData || [];
+    if (!usersList.length) {
+        usersList = await loadUsersData();
+        _skiUserData = usersList || [];
+    }
 
     let list = [];
     if (APP_CONFIG.USE_MOCK) {
@@ -1563,19 +2235,23 @@ async function initRiwayat() {
         return;
     }
 
-    tbody.innerHTML = list.map(p => `
-        <tr>
-            <td>${p.tahunAjaran || '-'}</td>
-            <td>${p.nip}</td>
-            <td>${p.nama}</td>
-            <td>${p.unit}</td>
-            <td>${p.finalScore || 0} (${p.finalGrade || '-'})</td>
-            <td><span class="status-badge ${p.status === 'Selesai' ? 'status-success' : 'status-pending'}">${p.status}</span></td>
-            <td>
-                <button class="btn-primary" style="padding: 5px 10px; font-size:0.8rem;" onclick="reviewPKK('${p.nip}')"><i class="fas fa-eye"></i> Lihat</button>
-            </td>
-        </tr>
-    `).join('');
+    tbody.innerHTML = list.map((p, idx) => {
+        const uObj = (usersList || []).find(u => String(u.nip).trim() === String(p.nip).trim());
+        const jabatan = p.jabatan || (uObj ? uObj.jabatan : '-');
+        return `
+            <tr>
+                <td style="text-align:center; font-weight:600;">${idx + 1}</td>
+                <td><strong style="color:#1e293b;">${jabatan}</strong></td>
+                <td>${p.nama}</td>
+                <td><span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:10px; font-weight:600; font-size:0.8rem;">${p.unit}</span></td>
+                <td><strong>${p.finalScore || 0}</strong> <span style="color:#64748b; font-size:0.82rem;">(${p.finalGrade || '-'})</span></td>
+                <td><span class="status-badge ${p.status === 'Selesai' ? 'status-success' : 'status-pending'}">${p.status}</span></td>
+                <td>
+                    <button class="btn-primary" style="padding: 5px 12px; font-size:0.8rem; font-weight:600;" onclick="viewPKK('${p.nip}')"><i class="fas fa-eye"></i> Lihat</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
 }
 
 // --- Page: Monitoring ---
@@ -1618,7 +2294,7 @@ async function initMonitoring() {
     const pkkByNip = {};
     pkkList.filter(p => !activeTahun || p.tahunAjaran === activeTahun).forEach(p => { pkkByNip[p.nip] = p; });
 
-    // Filter users by GM scope
+    // Filter users by GM / Manager scope
     if (currentUser.level === 'General Manager') {
         const isPendidikan = currentUser.jabatan && currentUser.jabatan.toLowerCase().includes('pendidikan');
         const isOperasional = currentUser.jabatan && currentUser.jabatan.toLowerCase().includes('operasional');
@@ -1627,6 +2303,21 @@ async function initMonitoring() {
             if (isPendidikan) return ['tk', 'sd', 'smp', 'sma'].includes(unit);
             if (isOperasional) return ['fa', 'ga', 'hrd'].includes(unit);
             return true;
+        });
+    } else if (currentUser.level === 'Manager') {
+        const mgrUnit = (currentUser.unit || '').trim().toLowerCase();
+        const mgrNip = String(currentUser.nip || '').trim();
+
+        allUsers = allUsers.filter(u => {
+            const empUnit = (u.unit || '').trim().toLowerCase();
+            const atasan1 = String(u.atasan1 || u.atasanNIP1 || '').trim();
+            const atasan2 = String(u.atasan2 || u.atasanNIP2 || '').trim();
+
+            // Match same unit or direct subordinate
+            const isSameUnit = mgrUnit && empUnit === mgrUnit;
+            const isSubordinate = mgrNip && (atasan1 === mgrNip || atasan2 === mgrNip);
+
+            return isSameUnit || isSubordinate;
         });
     }
 
@@ -1684,6 +2375,17 @@ async function initMonitoring() {
     if (elSearch) elSearch.oninput = applyMonitoringFilter;
     if (elUnit) elUnit.onchange = applyMonitoringFilter;
     if (elStatus) elStatus.onchange = applyMonitoringFilter;
+
+    // Show Export Excel button for Super Admin, GM, or Direktur
+    const btnExport = document.getElementById('btn-export-excel-monitoring');
+    if (btnExport) {
+        if (currentUser && ['Super Admin', 'General Manager', 'Direktur'].includes(currentUser.level)) {
+            btnExport.style.display = 'inline-flex';
+            btnExport.onclick = exportMonitoringToExcel;
+        } else {
+            btnExport.style.display = 'none';
+        }
+    }
 
     applyMonitoringFilter();
 }
@@ -1760,6 +2462,97 @@ window.sortMonitoring = function(field) {
     applyMonitoringFilter();
 };
 
+function exportMonitoringToExcel() {
+    if (!monitoringMasterData || monitoringMasterData.length === 0) {
+        showToast('Tidak ada data monitoring untuk di-export.', 'warning');
+        return;
+    }
+
+    const searchVal = (document.getElementById('filter-monitoring-search')?.value || '').toLowerCase().trim();
+    const unitVal = (document.getElementById('filter-monitoring-unit')?.value || '').toLowerCase().trim();
+    const statusVal = (document.getElementById('filter-monitoring-status')?.value || '').toLowerCase().trim();
+
+    let exportData = monitoringMasterData.filter(item => {
+        const matchSearch = !searchVal || item.nama.toLowerCase().includes(searchVal) || item.nip.toLowerCase().includes(searchVal);
+        const matchUnit = !unitVal || item.unit.toLowerCase() === unitVal;
+        const matchStatus = !statusVal || item.statusLabel.toLowerCase() === statusVal || 
+                            (statusVal.includes('verifikasi 1') && item.statusLabel.includes('Verifikasi Atasan 1')) ||
+                            (statusVal.includes('verifikasi 2') && item.statusLabel.includes('Verifikasi Atasan 2'));
+        return matchSearch && matchUnit && matchStatus;
+    });
+
+    if (exportData.length === 0) {
+        showToast('Tidak ada data yang sesuai filter untuk di-export.', 'warning');
+        return;
+    }
+
+    const activeTa = (document.getElementById('monitoring-ta-label')?.innerText || 'PKK').replace('TA.', '').trim();
+
+    let xml = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Monitoring PKK</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+<meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
+<style>
+  th { background-color: #036F3E; color: #ffffff; font-weight: bold; border: 0.5pt solid #000000; padding: 8px; text-align: center; }
+  td { border: 0.5pt solid #cbd5e1; padding: 6px; }
+  .text { mso-number-format:"\@"; }
+</style>
+</head>
+<body>
+<h2 style="color:#036F3E;">REKAP MONITORING PKK ${activeTa ? ' - TA ' + activeTa : ''}</h2>
+<table border="1">
+  <thead>
+    <tr>
+      <th>No</th>
+      <th>NIP</th>
+      <th>Nama Karyawan</th>
+      <th>Jabatan</th>
+      <th>Unit</th>
+      <th>Skor Akhir</th>
+      <th>Predikat</th>
+      <th>Status Penilaian</th>
+    </tr>
+  </thead>
+  <tbody>`;
+
+    exportData.forEach((row, idx) => {
+        const skorVal = row.pkk ? (row.pkk.finalScore || 0) : '-';
+        const gradeVal = row.pkk ? (row.pkk.finalGrade || '-') : '-';
+        xml += `
+    <tr>
+      <td style="text-align:center;">${idx + 1}</td>
+      <td class="text" style="text-align:center;">'${row.nip}</td>
+      <td>${row.nama || '-'}</td>
+      <td>${row.jabatan || '-'}</td>
+      <td style="text-align:center;">${row.unit || '-'}</td>
+      <td style="text-align:center;">${skorVal}</td>
+      <td style="text-align:center;">${gradeVal}</td>
+      <td style="text-align:center;">${row.statusLabel || '-'}</td>
+    </tr>`;
+    });
+
+    xml += `
+  </tbody>
+</table>
+</body>
+</html>`;
+
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const cleanTa = activeTa ? activeTa.replace(/[\/\\]/g, '_') : 'Export';
+    const filename = `Monitoring_PKK_${cleanTa}_${new Date().toISOString().slice(0,10)}.xls`;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showToast(`Berhasil meng-export ${exportData.length} data ke Excel.`, 'success');
+}
+window.exportMonitoringToExcel = exportMonitoringToExcel;
+
 // Helper caches for preview
 let _previewUsersCache = null;
 let _previewSkisCache = null;
@@ -1795,6 +2588,16 @@ async function viewPKKPreview(nip) {
 
     const pkk = pkkRes.data[0];
     const userInfo = (_previewUsersCache || []).find(u => u.nip == nip) || {};
+
+    // Supervisor info for signature table
+    const atasan1Nip = String(userInfo.atasan1 || pkk.atasan1 || pkk.atasanNIP1 || '').trim();
+    const atasan2Nip = String(userInfo.atasan2 || pkk.atasan2 || pkk.atasanNIP2 || '').trim();
+
+    const uAtasan1 = (_previewUsersCache || []).find(u => String(u.nip).trim() === atasan1Nip);
+    const uAtasan2 = (_previewUsersCache || []).find(u => String(u.nip).trim() === atasan2Nip);
+
+    const atasan1Name = uAtasan1 ? uAtasan1.nama : (atasan1Nip && atasan1Nip !== '-' && atasan1Nip !== '0' && atasan1Nip.toLowerCase() !== 'null' ? atasan1Nip : '-');
+    const atasan2Name = uAtasan2 ? uAtasan2.nama : (atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Nip.toLowerCase() !== 'null' ? atasan2Nip : '-');
 
     // Get matching SKI templates
     const targetJabatan = String(userInfo.jabatan || pkk.level).trim().toLowerCase();
@@ -1897,9 +2700,8 @@ async function viewPKKPreview(nip) {
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px 24px; font-size:0.88rem;">
                 <div><span style="color:#64748b; font-weight:600; display:inline-block; width:110px;">Nama Lengkap</span>: <strong style="color:#1e293b;">${pkk.nama}</strong></div>
                 <div><span style="color:#64748b; font-weight:600; display:inline-block; width:110px;">NIP</span>: ${pkk.nip}</div>
-                <div><span style="color:#64748b; font-weight:600; display:inline-block; width:110px;">Jabatan</span>: ${userInfo.jabatan || pkk.level}</div>
+                <div><span style="color:#64748b; font-weight:600; display:inline-block; width:110px;">Jabatan</span>: ${pkk.jabatan || userInfo.jabatan || pkk.level || '-'}</div>
                 <div><span style="color:#64748b; font-weight:600; display:inline-block; width:110px;">Unit</span>: ${pkk.unit}</div>
-                <div><span style="color:#64748b; font-weight:600; display:inline-block; width:110px;">Level</span>: ${pkk.level}</div>
             </div>
         </div>
 
@@ -2006,26 +2808,39 @@ async function viewPKKPreview(nip) {
 
         <!-- Section G: Pengesahan (5 Tanda Tangan) -->
         <div style="margin-top:28px; page-break-inside:avoid;">
-            <div style="font-weight:700; color:white; font-size:0.88rem; padding:6px 12px; background:#10b981; border-radius:4px 4px 0 0; letter-spacing:0.5px;">
-                G. PENGESAHAN
+            <div style="font-weight:700; color:white; font-size:0.88rem; padding:6px 12px; background:#036F3E; border-radius:4px 4px 0 0; letter-spacing:0.5px;">
+                G. PENGESAHAN DOKUMEN PENILAIAN
             </div>
             <table style="width:100%; border-collapse:collapse; border:1.5px solid #1e293b; text-align:center; font-size:0.82rem;">
                 <thead>
                     <tr style="border-bottom:1.5px solid #1e293b; background:#f8fafc; font-weight:700; color:#1e293b;">
                         <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:20%;">Yang Dinilai</th>
-                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:20%;">Penilai</th>
-                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:20%;">Atasan Penilai</th>
-                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:20%;">Kepala Divisi</th>
+                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:20%;">Penilai (Atasan 1)</th>
+                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:20%;">Atasan Penilai 2</th>
+                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:20%;">Kepala Divisi / GM</th>
                         <th style="padding:8px 4px; width:20%;">HRD</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr style="height:75px;">
-                        <td style="border-right:1.5px solid #1e293b; vertical-align:bottom; padding-bottom:6px; font-weight:600; color:#1e293b;">${pkk.nama}</td>
-                        <td style="border-right:1.5px solid #1e293b;"></td>
-                        <td style="border-right:1.5px solid #1e293b;"></td>
-                        <td style="border-right:1.5px solid #1e293b;"></td>
-                        <td></td>
+                    <tr style="height:95px; vertical-align:bottom;">
+                        <td style="border-right:1.5px solid #1e293b; padding-bottom:8px;">
+                            <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${pkk.nama}</div>
+                            <div style="font-size:0.75rem; color:#64748b;">NIP: ${pkk.nip}</div>
+                        </td>
+                        <td style="border-right:1.5px solid #1e293b; padding-bottom:8px;">
+                            <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${atasan1Name}</div>
+                            <div style="font-size:0.75rem; color:#64748b;">${atasan1Nip && atasan1Nip !== '-' && atasan1Nip !== '0' && atasan1Nip.toLowerCase() !== 'null' ? 'NIP: ' + atasan1Nip : ''}</div>
+                        </td>
+                        <td style="border-right:1.5px solid #1e293b; padding-bottom:8px;">
+                            <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${atasan2Name}</div>
+                            <div style="font-size:0.75rem; color:#64748b;">${atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Nip.toLowerCase() !== 'null' ? 'NIP: ' + atasan2Nip : ''}</div>
+                        </td>
+                        <td style="border-right:1.5px solid #1e293b; padding-bottom:8px;">
+                            <div style="font-weight:700; color:#1e293b; text-decoration:underline;">( &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; )</div>
+                        </td>
+                        <td style="padding-bottom:8px;">
+                            <div style="font-weight:700; color:#1e293b; text-decoration:underline;">( &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; )</div>
+                        </td>
                     </tr>
                     <tr style="border-top:1.5px solid #1e293b; font-size:0.78rem; color:#334155;">
                         <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">Tgl. &nbsp;&nbsp;&nbsp;&nbsp; / &nbsp;&nbsp;&nbsp;&nbsp; /</td>
@@ -2050,10 +2865,13 @@ async function viewPKKPreview(nip) {
             </div>
         </div>
 
-        <!-- Print Action Button -->
-        <div style="text-align:center; margin-top:24px;" class="no-print">
-            <button onclick="window.print()" style="background:#1e293b; color:white; border:none; border-radius:8px; padding:10px 28px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+        <!-- Print Action Buttons -->
+        <div style="text-align:center; margin-top:24px; display:flex; justify-content:center; gap:12px;" class="no-print">
+            <button onclick="window.print()" style="background:#036F3E; color:white; border:none; border-radius:8px; padding:10px 28px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); transition:all 0.2s;">
                 <i class="fas fa-print"></i> Cetak / Save PDF
+            </button>
+            <button onclick="closePreviewPKK()" style="background:#64748b; color:white; border:none; border-radius:8px; padding:10px 24px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+                <i class="fas fa-times"></i> Tutup
             </button>
         </div>
     </div>`;
@@ -2089,7 +2907,6 @@ function initUbahPassword() {
             btn.disabled = true;
 
             if (APP_CONFIG.USE_MOCK) {
-                await fetchGasAPI('changePassword');
                 if (currentUser.password === passLama) {
                     currentUser.password = passBaru;
                     localStorage.setItem('pkk_user', JSON.stringify(currentUser));
@@ -2099,7 +2916,7 @@ function initUbahPassword() {
                     showToast('Password lama salah!', 'error');
                 }
             } else {
-                const res = await fetchGasAPI('changePassword', {
+                const res = await fetchSupabaseAPI('changePassword', {
                     nip: currentUser.nip,
                     oldPassword: passLama,
                     newPassword: passBaru
@@ -2121,6 +2938,27 @@ function initUbahPassword() {
 }
 
 // --- Page: Settings (Bobot) ---
+const DEFAULT_BOBOT_MATRIX = [
+    ["Category", "Aspek", "Direktur", "General Manager", "Manager", "Supervisor", "TimLeader", "staff"],
+    ["Overall", "Pekerjaan", 50, 50, 50, 50, 55, 60],
+    ["Overall", "Perilaku", 30, 30, 30, 30, 35, 40],
+    ["Overall", "Manajerial", 20, 20, 20, 20, 10, 0],
+    ["Perilaku", "Kualitas Hasil Kerja", 2, 2, 2, 3, 3, 5],
+    ["Perilaku", "Ketepatan Waktu Pengerjaan", 2, 2, 2, 3, 3, 5],
+    ["Perilaku", "Keterampilan Kerja", 2, 2, 2, 3, 3, 5],
+    ["Perilaku", "Kerjasama", 4, 4, 4, 3, 3, 5],
+    ["Perilaku", "Disiplin", 4, 4, 4, 3, 3, 5],
+    ["Perilaku", "Inisiatif", 4, 4, 4, 4, 4, 4],
+    ["Perilaku", "Peningkatan Tanggung Jawab", 4, 4, 4, 4, 4, 3],
+    ["Perilaku", "Ahlak Islami", 4, 4, 4, 3, 3, 4],
+    ["Perilaku", "Adaptasi Terhadap Perubahan", 4, 4, 4, 4, 4, 4],
+    ["Manajerial", "Planning & Organizing", 4, 4, 4, 5, 3, 0],
+    ["Manajerial", "Controlling", 4, 4, 4, 4, 2, 0],
+    ["Manajerial", "Analytical Thinking", 4, 4, 4, 4, 2, 0],
+    ["Manajerial", "Decision Making", 3, 3, 3, 2, 1, 0],
+    ["Manajerial", "Developing Others", 5, 5, 5, 5, 2, 0]
+];
+
 let currentBobotData = [];
 async function initSettings() {
     const form = document.getElementById('form-settings');
@@ -2130,36 +2968,32 @@ async function initSettings() {
 
     if (!form) return;
 
-    if (APP_CONFIG.USE_MOCK) {
-        tbodyUtama.innerHTML = '<tr><td colspan="7" class="text-center">Mode Mock: Fitur Edit Bobot membutuhkan koneksi ke server.</td></tr>';
-        return;
-    }
-
-    const res = await fetchGasAPI('getBobot');
-    if (res && res.success && res.data.length > 0) {
+    const res = await fetchSupabaseAPI('getBobot');
+    if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
         currentBobotData = res.data;
-        renderBobotSection(res.data, 'Overall', tbodyUtama);
-        renderBobotSection(res.data, 'Perilaku', tbodyPerilaku);
-        renderBobotSection(res.data, 'Manajerial', tbodyManajerial);
-        calculateSettingTotals();
-
-        // Attach input listener to recalculate totals
-        form.querySelectorAll('input').forEach(input => {
-            input.addEventListener('input', calculateSettingTotals);
-        });
     } else {
-        tbodyUtama.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Gagal memuat data bobot.</td></tr>';
+        currentBobotData = JSON.parse(JSON.stringify(DEFAULT_BOBOT_MATRIX));
     }
+
+    renderBobotSection(currentBobotData, 'Overall', tbodyUtama);
+    renderBobotSection(currentBobotData, 'Perilaku', tbodyPerilaku);
+    renderBobotSection(currentBobotData, 'Manajerial', tbodyManajerial);
+    calculateSettingTotals();
+
+    form.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', calculateSettingTotals);
+    });
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        // Grab updated values
         const inputs = form.querySelectorAll('input[data-row]');
         inputs.forEach(input => {
             const r = parseInt(input.getAttribute('data-row'));
             const c = parseInt(input.getAttribute('data-col'));
-            currentBobotData[r][c] = input.value;
+            if (currentBobotData[r]) {
+                currentBobotData[r][c] = parseFloat(input.value) || 0;
+            }
         });
 
         const btn = document.getElementById('btn-save-settings');
@@ -2167,9 +3001,9 @@ async function initSettings() {
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
         btn.disabled = true;
 
-        const saveRes = await fetchGasAPI('saveBobot', { bobotData: currentBobotData });
+        const saveRes = await fetchSupabaseAPI('saveBobot', { bobotData: currentBobotData });
         if (saveRes && saveRes.success) {
-            showToast('Bobot berhasil disimpan!', 'success');
+            showToast('Setting Bobot berhasil disimpan!', 'success');
         } else {
             showToast('Gagal menyimpan bobot.', 'error');
         }
@@ -2239,7 +3073,7 @@ async function initTahunAjaran() {
 
     const loadData = async () => {
         tbody.innerHTML = '<tr><td colspan="3" class="text-center"><i class="fas fa-spinner fa-spin"></i> Memuat Data...</td></tr>';
-        const res = await fetchGasAPI('getTahunAjaran');
+        const res = await fetchSupabaseAPI('getTahunAjaran');
         if (res && res.success) {
             if (res.data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="3" class="text-center">Belum ada data Tahun Ajaran</td></tr>';
@@ -2260,7 +3094,8 @@ async function initTahunAjaran() {
             `).join('');
 
             if (res.active) {
-                document.getElementById('active-academic-year').innerText = "TA. " + res.active;
+                const elHeaderActive = document.getElementById('active-academic-year');
+                if (elHeaderActive) elHeaderActive.innerText = "TA. " + res.active;
             }
         } else {
             tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger">Gagal memuat data</td></tr>';
@@ -2287,7 +3122,7 @@ async function initTahunAjaran() {
             btnSimpan.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan';
             btnSimpan.disabled = true;
 
-            const res = await fetchGasAPI('addTahunAjaran', { tahun: val });
+            const res = await fetchSupabaseAPI('addTahunAjaran', { tahun: val });
             if (res && res.success) {
                 showToast(res.message, 'success');
                 modal.style.display = 'none';
@@ -2305,7 +3140,7 @@ async function initTahunAjaran() {
 
 window.setTahunAjaranAktif = async (id) => {
     showToast('Mengaktifkan Tahun Ajaran...', 'info');
-    const res = await fetchGasAPI('setAktifTahunAjaran', { id: id });
+    const res = await fetchSupabaseAPI('setAktifTahunAjaran', { id: id });
     if (res && res.success) {
         showToast(res.message, 'success');
         initTahunAjaran(); // reloads data and header
@@ -2370,51 +3205,82 @@ async function initFormSki() {
         const selectedLvl = selLevel ? selLevel.value : '';
         const selectedU = selUnit ? selUnit.value : '';
 
+        let candidateSet = new Set();
+
+        // 1. Get users matching BOTH selectedU and selectedLvl strictly from _skiUserData
         let filteredUsers = _skiUserData;
         if (selectedU) {
-            filteredUsers = filteredUsers.filter(u => u.unit === selectedU);
+            filteredUsers = filteredUsers.filter(u => (u.unit || '').toLowerCase().trim() === selectedU.toLowerCase().trim());
         }
         if (selectedLvl) {
-            filteredUsers = filteredUsers.filter(u => u.level === selectedLvl);
+            filteredUsers = filteredUsers.filter(u => (u.level || '').toLowerCase().trim() === selectedLvl.toLowerCase().trim());
         }
 
-        let jabatans = [...new Set(filteredUsers.map(u => u.jabatan).filter(Boolean))];
+        filteredUsers.forEach(u => {
+            if (u.jabatan) candidateSet.add(u.jabatan.trim());
+        });
 
-        if (jabatans.length === 0 && selectedLvl) {
-            jabatans = [...new Set(_skiUserData.filter(u => u.level === selectedLvl).map(u => u.jabatan).filter(Boolean))];
+        // 2. Also check _allSkisData for existing templates matching selectedU and selectedLvl strictly
+        if (selectedU && selectedLvl) {
+            _allSkisData.filter(s => {
+                return (s.targetUnit || '').toLowerCase().trim() === selectedU.toLowerCase().trim()
+                    && (s.targetLevel || '').toLowerCase().trim() === selectedLvl.toLowerCase().trim();
+            }).forEach(s => {
+                if (s.targetJabatan) candidateSet.add(s.targetJabatan.trim());
+            });
         }
 
-        if (jabatans.length === 0 && selectedLvl === 'Manager') {
-            if (selectedU) {
-                jabatans = [`Manager ${selectedU}`, `Kepala ${selectedU}`];
+        // 3. Fallbacks for Manager level IF appropriate:
+        if (selectedLvl === 'Manager') {
+            const isSchoolUnit = ['tk', 'sd', 'smp', 'sma'].includes((selectedU || '').toLowerCase().trim());
+            if (isSchoolUnit) {
+                candidateSet.add(`Kepala Sekolah ${selectedU}`);
+                candidateSet.add(`Kepala Sekolah`);
+                candidateSet.add(`Kepala ${selectedU}`);
+            } else if (selectedU) {
+                candidateSet.add(`Manager ${selectedU}`);
+                candidateSet.add(`Manajer ${selectedU}`);
             } else {
-                jabatans = ['Manager IT', 'Manager HRD', 'Kepala Sekolah SD', 'Kepala Sekolah SMP', 'Kepala Sekolah SMA', 'Kepala Sekolah TK', 'Manager Operasional', 'Manager Keuangan'];
+                candidateSet.add('Manager IT');
+                candidateSet.add('Manager HRD');
+                candidateSet.add('Manager Operasional');
+                candidateSet.add('Manager Keuangan');
+                candidateSet.add('Kepala Sekolah SMA');
+                candidateSet.add('Kepala Sekolah SMP');
+                candidateSet.add('Kepala Sekolah SD');
+                candidateSet.add('Kepala Sekolah TK');
             }
         }
 
-        // Filter out jabatans that ALREADY exist in _allSkisData for the selected unit & level
-        jabatans = jabatans.filter(j => {
-            const exists = _allSkisData.some(s => {
+        let candidates = [...candidateSet].filter(Boolean);
+
+        const optionsHtml = ['<option value="">-- Pilih Jabatan --</option>'];
+
+        candidates.forEach(j => {
+            const existingSkis = _allSkisData.filter(s => {
                 return (s.targetUnit || '').toLowerCase().trim() === (selectedU || '').toLowerCase().trim()
                     && (s.targetLevel || '').toLowerCase().trim() === (selectedLvl || '').toLowerCase().trim()
                     && (s.targetJabatan || '').toLowerCase().trim() === (j || '').toLowerCase().trim();
             });
-            return !exists;
+
+            if (existingSkis.length > 0) {
+                const totalBobotGroup = existingSkis.reduce((sum, item) => {
+                    let b = parseFloat(item.bobot) || 0;
+                    return sum + ((b <= 1 && b > 0) ? b * 100 : b);
+                }, 0);
+                const roundedBobot = Math.round(totalBobotGroup * 10) / 10;
+
+                if (roundedBobot >= 100) {
+                    optionsHtml.push(`<option value="${j}">${j} (Sudah 100% - Edit di Master SKI)</option>`);
+                } else {
+                    optionsHtml.push(`<option value="${j}">${j} (Draf ${roundedBobot}%)</option>`);
+                }
+            } else {
+                optionsHtml.push(`<option value="${j}">${j}</option>`);
+            }
         });
 
-        const currentVal = selJabatan.value;
-        if (jabatans.length === 0 && selectedLvl) {
-            selJabatan.innerHTML = '<option value="">-- Semua Jabatan pada Level Ini Sudah Dibuat --</option>';
-        } else {
-            selJabatan.innerHTML = '<option value="">-- Pilih Jabatan --</option>' +
-                jabatans.map(j => `<option value="${j}">${j}</option>`).join('');
-        }
-
-        if (jabatans.includes(currentVal)) {
-            selJabatan.value = currentVal;
-        } else {
-            selJabatan.value = '';
-        }
+        selJabatan.innerHTML = optionsHtml.join('');
     };
 
     const updateLevelDropdown = () => {
@@ -2738,8 +3604,10 @@ window.deleteSKI = async (id) => {
     const res = await fetchGasAPI('deleteSKI', { id });
     if (res && res.success) {
         showToast('SKI berhasil dihapus.', 'success');
-        if (currentAppPage === 'form_ski') initFormSki();
-        if (currentAppPage === 'daftar_ski') initDaftarSki();
+        _isSkisDataLoaded = false;
+        clearLocalCache('pkk_skis_cache');
+        if (typeof initFormSki === 'function' && currentAppPage === 'form_ski') initFormSki();
+        if (typeof initDaftarSki === 'function' && currentAppPage === 'daftar_ski') initDaftarSki(true);
     } else {
         showToast('Gagal menghapus SKI.', 'error');
     }
@@ -2753,32 +3621,28 @@ async function loadSkisData(forceRefresh = false) {
         return _allSkisData;
     }
 
-    if (APP_CONFIG.USE_MOCK) {
-        _allSkisData = MOCK_DB.skis.map((s, idx) => ({
-            id: s.id || (idx + 1),
-            targetUnit: currentUser ? currentUser.unit : 'IT',
-            targetLevel: 'Staff',
-            targetJabatan: 'IT Support',
-            kpiDepartemen: 'KPI Support IT',
-            ski: s.ski,
-            targetDetail: '100% Selesai',
-            kriteria1: 'Sangat kurang (< 50%)',
-            kriteria2: 'Kurang (50-69%)',
-            kriteria3: 'Cukup (70-84%)',
-            kriteria4: 'Baik (85-95%)',
-            kriteria5: 'Sangat Baik (> 95%)',
-            bobot: s.bobot,
-            tahunAjaran: '2025/2026'
-        }));
-        _isSkisDataLoaded = true;
-    } else {
-        const res = await fetchGasAPI('getSKIs');
-        if (res && res.success) {
-            _allSkisData = res.data || [];
+    if (!forceRefresh && _allSkisData.length === 0) {
+        const local = getLocalCache('pkk_skis_cache');
+        if (local && Array.isArray(local) && local.length > 0) {
+            _allSkisData = local;
             _isSkisDataLoaded = true;
-        } else {
-            return null;
+            fetchSupabaseAPI('getSKIs').then(res => {
+                if (res && res.success && Array.isArray(res.data)) {
+                    _allSkisData = res.data;
+                    setLocalCache('pkk_skis_cache', res.data);
+                }
+            }).catch(() => {});
+            return _allSkisData;
         }
+    }
+
+    const res = await fetchSupabaseAPI('getSKIs');
+    if (res && res.success) {
+        _allSkisData = res.data || [];
+        _isSkisDataLoaded = true;
+        setLocalCache('pkk_skis_cache', _allSkisData);
+    } else {
+        return _allSkisData.length > 0 ? _allSkisData : null;
     }
 
     return _allSkisData;
@@ -2795,6 +3659,8 @@ async function initDaftarSki(forceRefresh = false) {
 
     if (!tbody) return;
 
+    setupCsvSkiModalEvents();
+
     // Sembunyikan tombol Input SKI Baru HANYA untuk Direktur (Read-only total)
     const isReadOnlyAll = (currentUser.level === 'Direktur');
     if (btnInputBaru) {
@@ -2810,6 +3676,7 @@ async function initDaftarSki(forceRefresh = false) {
         btnRefresh.onclick = async () => {
             btnRefresh.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memuat...';
             btnRefresh.disabled = true;
+            clearLocalCache('pkk_skis_cache');
             await initDaftarSki(true);
             btnRefresh.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh';
             btnRefresh.disabled = false;
@@ -2826,50 +3693,73 @@ async function initDaftarSki(forceRefresh = false) {
         }
     }
 
-    // --- Filter SKI berdasarkan role & unit pengguna ---
+    let displaySkis = [..._allSkisData];
+
+    // Filter SKI berdasarkan role & unit pengguna
     if (currentUser.level === 'General Manager') {
-        // GM: filter berdasarkan bidang jabatan
         const isPendidikan = currentUser.jabatan && currentUser.jabatan.toLowerCase().includes('pendidikan');
         const isOperasional = currentUser.jabatan && currentUser.jabatan.toLowerCase().includes('operasional');
 
         if (isPendidikan) {
-            _allSkisData = _allSkisData.filter(s => {
+            displaySkis = displaySkis.filter(s => {
                 const u = (s.targetUnit || '').toLowerCase();
                 return ['tk', 'sd', 'smp', 'sma'].includes(u);
             });
         } else if (isOperasional) {
-            _allSkisData = _allSkisData.filter(s => {
+            displaySkis = displaySkis.filter(s => {
                 const u = (s.targetUnit || '').toLowerCase();
                 return ['fa', 'ga', 'hrd'].includes(u);
             });
         }
     } else if (!['Super Admin', 'Direktur'].includes(currentUser.level)) {
-        // Manager, Supervisor, Tim Leader, Staff, Pelaksana:
-        // hanya tampilkan SKI sesuai unit mereka sendiri
         const userUnit = (currentUser.unit || '').toLowerCase().trim();
-        _allSkisData = _allSkisData.filter(s => {
+        displaySkis = displaySkis.filter(s => {
             const skiUnit = (s.targetUnit || '').toLowerCase().trim();
             return skiUnit === userUnit;
         });
     }
-    // Direktur & Super Admin: tampilkan semua unit (tidak difilter)
 
-    // Populate Filters
+    // Populate Filters (Cascading Filter Jabatan)
+    const updateFilterJabatanOptions = () => {
+        if (!filterJabatan) return;
+        const selectedUnit = filterUnit ? filterUnit.value : '';
+        const selectedLevel = filterLevel ? filterLevel.value : '';
+        const currentSelectedJabatan = filterJabatan.value;
+
+        let filteredForJabatan = displaySkis;
+        if (selectedUnit) {
+            filteredForJabatan = filteredForJabatan.filter(s => s.targetUnit === selectedUnit);
+        }
+        if (selectedLevel) {
+            filteredForJabatan = filteredForJabatan.filter(s => s.targetLevel === selectedLevel);
+        }
+
+        const availableJabatans = [...new Set(filteredForJabatan.map(s => s.targetJabatan).filter(Boolean))].sort();
+
+        filterJabatan.innerHTML = '<option value="">-- Semua Jabatan --</option>' +
+            availableJabatans.map(j => `<option value="${j}">${j}</option>`).join('');
+
+        if (availableJabatans.includes(currentSelectedJabatan)) {
+            filterJabatan.value = currentSelectedJabatan;
+        } else {
+            filterJabatan.value = '';
+        }
+    };
+
     if (filterUnit) {
-        const units = [...new Set(_allSkisData.map(s => s.targetUnit).filter(Boolean))];
+        const units = [...new Set(displaySkis.map(s => s.targetUnit).filter(Boolean))].sort();
         filterUnit.innerHTML = '<option value="">-- Semua Unit --</option>' +
             units.map(u => `<option value="${u}">${u}</option>`).join('');
     }
     if (filterLevel) {
-        const levels = [...new Set(_allSkisData.map(s => s.targetLevel).filter(Boolean))];
+        const levels = [...new Set(displaySkis.map(s => s.targetLevel).filter(Boolean))].sort();
         filterLevel.innerHTML = '<option value="">-- Semua Level --</option>' +
             levels.map(l => `<option value="${l}">${l}</option>`).join('');
     }
-    if (filterJabatan) {
-        const jabatans = [...new Set(_allSkisData.map(s => s.targetJabatan).filter(Boolean))];
-        filterJabatan.innerHTML = '<option value="">-- Semua Jabatan --</option>' +
-            jabatans.map(j => `<option value="${j}">${j}</option>`).join('');
-    }
+    updateFilterJabatanOptions();
+
+    let currentSkiPage = 1;
+    const skiPageSize = 10;
 
     const renderTable = () => {
         const uVal = filterUnit ? filterUnit.value : '';
@@ -2879,7 +3769,7 @@ async function initDaftarSki(forceRefresh = false) {
 
         // Grouping by Unit + Level + Jabatan
         const groupedMap = new Map();
-        _allSkisData.forEach(item => {
+        displaySkis.forEach(item => {
             const unit = item.targetUnit || '-';
             const level = item.targetLevel || '-';
             const jabatan = item.targetJabatan || '-';
@@ -2912,13 +3802,24 @@ async function initDaftarSki(forceRefresh = false) {
             return true;
         });
 
+        const pagContainer = document.getElementById('ski-pagination-container');
+
         if (filteredGroups.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:20px; color:#94a3b8;">Tidak ada data template SKI yang sesuai.</td></tr>';
+            if (pagContainer) pagContainer.innerHTML = '';
             return;
         }
 
-        tbody.innerHTML = filteredGroups.map((g, idx) => {
-            // Hitung total bobot kelompok ini
+        const totalPages = Math.ceil(filteredGroups.length / skiPageSize) || 1;
+        if (currentSkiPage > totalPages) currentSkiPage = totalPages;
+        if (currentSkiPage < 1) currentSkiPage = 1;
+
+        const startIdx = (currentSkiPage - 1) * skiPageSize;
+        const pagedGroups = filteredGroups.slice(startIdx, startIdx + skiPageSize);
+        const totalSkiCount = filteredGroups.reduce((sum, g) => sum + g.skis.length, 0);
+
+        tbody.innerHTML = pagedGroups.map((g, idx) => {
+            const rowNum = startIdx + idx + 1;
             const totalBobotGroup = g.skis.reduce((sum, item) => {
                 let b = parseFloat(item.bobot) || 0;
                 return sum + ((b <= 1 && b > 0) ? b * 100 : b);
@@ -2926,30 +3827,30 @@ async function initDaftarSki(forceRefresh = false) {
             const roundedBobot = Math.round(totalBobotGroup * 10) / 10;
             const isComplete = Math.round(roundedBobot) >= 100;
 
-            // Hak akses edit per grup:
-            // - Direktur: read-only
-            // - General Manager: hanya bisa edit/hapus SKI khusus level Manager
-            // - Super Admin / Manager / SPV / TL: bisa edit SKI grupnya
             let canEditGroup = true;
             if (currentUser.level === 'Direktur') {
                 canEditGroup = false;
             } else if (currentUser.level === 'General Manager') {
                 canEditGroup = (g.level === 'Manager');
+            } else if (currentUser.level === 'Manager') {
+                canEditGroup = (g.level !== 'Manager');
+            } else if (['Pelaksana', 'Staff', 'Tim Leader', 'Supervisor'].includes(currentUser.level)) {
+                canEditGroup = false;
             }
 
             return `
                 <tr>
-                    <td style="text-align:center; font-weight:600;">${idx + 1}</td>
-                    <td><span style="background:#e0e7ff; color:#3730a3; padding:3px 10px; border-radius:12px; font-weight:600; font-size:0.8rem;">${g.unit}</span></td>
-                    <td><span style="background:#f1f5f9; color:#334155; padding:3px 10px; border-radius:12px; font-weight:600; font-size:0.8rem;">${g.level}</span></td>
+                    <td style="text-align:center; font-weight:600;">${rowNum}</td>
+                    <td><span style="background:#e0e7ff; color:#3730a3; padding:4px 10px; border-radius:12px; font-weight:600; font-size:0.8rem; display:inline-block; white-space:nowrap;">${g.unit}</span></td>
+                    <td><span style="background:#f1f5f9; color:#334155; padding:4px 10px; border-radius:12px; font-weight:600; font-size:0.8rem; display:inline-block; white-space:nowrap;">${g.level}</span></td>
                     <td><strong style="color:#1e293b; font-size:0.88rem;">${g.jabatan}</strong></td>
                     <td style="text-align:center;">
-                        <span style="background:#fef3c7; color:#92400e; padding:3px 10px; border-radius:12px; font-weight:600; font-size:0.8rem;">${g.skis.length} Target</span>
+                        <span style="background:#fef3c7; color:#92400e; padding:4px 10px; border-radius:12px; font-weight:600; font-size:0.8rem; display:inline-block; white-space:nowrap;">${g.skis.length} Target</span>
                     </td>
                     <td style="text-align:center;">
                         ${isComplete ? 
-                            `<span style="background:#dcfce7; color:#15803d; border:1px solid #86efac; padding:3px 10px; border-radius:12px; font-weight:700; font-size:0.78rem; display:inline-flex; align-items:center; gap:4px;"><i class="fas fa-check-circle"></i> ${roundedBobot}% (Lengkap)</span>` :
-                            `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:3px 10px; border-radius:12px; font-weight:700; font-size:0.78rem; display:inline-flex; align-items:center; gap:4px;"><i class="fas fa-clock"></i> ${roundedBobot}% (Draf)</span>`
+                            `<span style="background:#dcfce7; color:#15803d; border:1px solid #86efac; padding:4px 10px; border-radius:12px; font-weight:700; font-size:0.78rem; display:inline-flex; align-items:center; gap:4px; white-space:nowrap;"><i class="fas fa-check-circle"></i> ${roundedBobot}% (Lengkap)</span>` :
+                            `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:4px 10px; border-radius:12px; font-weight:700; font-size:0.78rem; display:inline-flex; align-items:center; gap:4px; white-space:nowrap;"><i class="fas fa-clock"></i> ${roundedBobot}% (Draf)</span>`
                         }
                     </td>
                     <td style="text-align:center; white-space:nowrap;">
@@ -2973,14 +3874,68 @@ async function initDaftarSki(forceRefresh = false) {
                 </tr>
             `;
         }).join('');
+
+        if (pagContainer) {
+            const endIdx = Math.min(startIdx + skiPageSize, filteredGroups.length);
+            let paginationBtns = '';
+
+            paginationBtns += `<button class="btn-secondary" style="padding:4px 10px; font-size:0.8rem;" ${currentSkiPage === 1 ? 'disabled' : ''} onclick="window.changeSkiPage(${currentSkiPage - 1})"><i class="fas fa-chevron-left"></i> Prev</button>`;
+
+            for (let p = 1; p <= totalPages; p++) {
+                if (p === 1 || p === totalPages || (p >= currentSkiPage - 1 && p <= currentSkiPage + 1)) {
+                    paginationBtns += `<button class="${p === currentSkiPage ? 'btn-primary' : 'btn-secondary'}" style="padding:4px 10px; font-size:0.8rem; min-width:32px;" onclick="window.changeSkiPage(${p})">${p}</button>`;
+                } else if (p === currentSkiPage - 2 || p === currentSkiPage + 2) {
+                    paginationBtns += `<span style="padding:0 4px; color:#94a3b8;">...</span>`;
+                }
+            }
+
+            paginationBtns += `<button class="btn-secondary" style="padding:4px 10px; font-size:0.8rem;" ${currentSkiPage === totalPages ? 'disabled' : ''} onclick="window.changeSkiPage(${currentSkiPage + 1})">Next <i class="fas fa-chevron-right"></i></button>`;
+
+            pagContainer.innerHTML = `
+                <div>
+                    Menampilkan <strong>${startIdx + 1} - ${endIdx}</strong> dari <strong>${filteredGroups.length}</strong> Template Jabatan (Total <strong>${totalSkiCount}</strong> SKI)
+                </div>
+                <div style="display:flex; gap:4px; align-items:center;">
+                    ${paginationBtns}
+                </div>
+            `;
+        }
+    };
+
+    window.changeSkiPage = (page) => {
+        currentSkiPage = page;
+        renderTable();
+        const cardHeader = document.querySelector('.page-daftar-ski .card-header');
+        if (cardHeader) cardHeader.scrollIntoView({ behavior: 'smooth' });
     };
 
     renderTable();
 
-    if (filterUnit) filterUnit.onchange = renderTable;
-    if (filterLevel) filterLevel.onchange = renderTable;
-    if (filterJabatan) filterJabatan.onchange = renderTable;
-    if (searchText) searchText.oninput = renderTable;
+    let searchDebounceTimer = null;
+    if (filterUnit) {
+        filterUnit.onchange = () => {
+            currentSkiPage = 1;
+            updateFilterJabatanOptions();
+            renderTable();
+        };
+    }
+    if (filterLevel) {
+        filterLevel.onchange = () => {
+            currentSkiPage = 1;
+            updateFilterJabatanOptions();
+            renderTable();
+        };
+    }
+    if (filterJabatan) filterJabatan.onchange = () => { currentSkiPage = 1; renderTable(); };
+    if (searchText) {
+        searchText.oninput = () => {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                currentSkiPage = 1;
+                renderTable();
+            }, 300);
+        };
+    }
 
     // Modal Close event
     const modalDetail = document.getElementById('modal-detail-ski');
@@ -3120,6 +4075,14 @@ window.editGroupSki = (encodedKey) => {
 
     if (currentUser.level === 'General Manager' && items[0].targetLevel !== 'Manager') {
         showToast('General Manager hanya dapat mengedit SKI khusus untuk level Manager.', 'warning');
+        return viewGroupSki(encodedKey);
+    }
+    if (currentUser.level === 'Manager' && items[0].targetLevel === 'Manager') {
+        showToast('Manager tidak dapat mengedit SKI level Manager (dibuat oleh General Manager).', 'warning');
+        return viewGroupSki(encodedKey);
+    }
+    if (['Direktur', 'Supervisor', 'Staff', 'Pelaksana'].includes(currentUser.level)) {
+        showToast('Level ' + currentUser.level + ' tidak memiliki hak akses untuk mengedit template SKI.', 'warning');
         return viewGroupSki(encodedKey);
     }
 
@@ -3524,6 +4487,14 @@ window.deleteGroupSki = async (encodedKey) => {
         showToast('General Manager hanya dapat menghapus SKI khusus untuk level Manager.', 'warning');
         return;
     }
+    if (currentUser.level === 'Manager' && items[0].targetLevel === 'Manager') {
+        showToast('Manager tidak dapat menghapus SKI level Manager (dibuat oleh General Manager).', 'warning');
+        return;
+    }
+    if (['Direktur', 'Supervisor', 'Staff', 'Pelaksana'].includes(currentUser.level)) {
+        showToast('Level ' + currentUser.level + ' tidak memiliki hak akses untuk menghapus template SKI.', 'warning');
+        return;
+    }
 
     const jabatanName = items[0].targetJabatan || 'Jabatan ini';
 
@@ -3575,6 +4546,19 @@ window.duplicateGroupSki = async (encodedKey) => {
     });
 
     if (!originItems.length) return;
+
+    if (currentUser.level === 'General Manager' && originItems[0].targetLevel !== 'Manager') {
+        showToast('General Manager hanya dapat menduplikat SKI khusus untuk level Manager.', 'warning');
+        return;
+    }
+    if (currentUser.level === 'Manager' && originItems[0].targetLevel === 'Manager') {
+        showToast('Manager tidak dapat menduplikat SKI level Manager (dibuat oleh General Manager).', 'warning');
+        return;
+    }
+    if (['Direktur', 'Supervisor', 'Staff', 'Pelaksana'].includes(currentUser.level)) {
+        showToast('Level ' + currentUser.level + ' tidak memiliki hak akses untuk menduplikat template SKI.', 'warning');
+        return;
+    }
 
     const modal = document.getElementById('modal-duplikat-ski');
     const body = document.getElementById('modal-duplikat-ski-body');
@@ -3844,3 +4828,607 @@ window.confirmDuplicateSki = async (encodedKey) => {
         editGroupSki(newGroupKey);
     }, 300);
 };
+
+// ========================================================
+// --- CSV PARSER & MANAGEMENT UNTUK USER & SKI (SUPABASE) ---
+// ========================================================
+
+function parseCSVText(csvText) {
+    const rows = [];
+    let currentRow = [];
+    let currentCell = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < csvText.length; i++) {
+        const char = csvText[i];
+        const nextChar = csvText[i + 1];
+
+        if (char === '"') {
+            if (inQuotes) {
+                if (nextChar === '"') {
+                    currentCell += '"';
+                    i++;
+                } else {
+                    inQuotes = false;
+                }
+            } else {
+                if (currentCell.length === 0) {
+                    inQuotes = true;
+                } else {
+                    currentCell += '"';
+                }
+            }
+        } else if ((char === ',' || char === ';' || char === '\t') && !inQuotes) {
+            currentRow.push(currentCell.trim());
+            currentCell = '';
+        } else if ((char === '\r' || char === '\n') && !inQuotes) {
+            if (char === '\r' && nextChar === '\n') i++;
+            currentRow.push(currentCell.trim());
+            if (currentRow.some(f => f.length > 0)) {
+                rows.push(currentRow);
+            }
+            currentRow = [];
+            currentCell = '';
+        } else {
+            currentCell += char;
+        }
+    }
+    if (currentCell.length > 0 || currentRow.length > 0) {
+        currentRow.push(currentCell.trim());
+        if (currentRow.some(f => f.length > 0)) {
+            rows.push(currentRow);
+        }
+    }
+    return rows;
+}
+
+// --- MANAJEMEN USER & IMPORT CSV USER ---
+let _allUsersManagementList = [];
+let _userCurrentPage = 1;
+const _userRowsPerPage = 15;
+let _pendingCsvUsersToImport = [];
+
+async function initManajemenUser(forceRefresh = false) {
+    const tbody = document.getElementById('tbody-manajemen-user');
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center" style="padding:30px;"><i class="fas fa-spinner fa-spin"></i> Memuat data user...</td></tr>`;
+
+    _allUsersManagementList = await loadUsersData(forceRefresh);
+
+    const unitSelect = document.getElementById('filter-user-unit');
+    if (unitSelect) {
+        const units = Array.from(new Set(_allUsersManagementList.map(u => u.unit).filter(Boolean))).sort();
+        unitSelect.innerHTML = `<option value="">-- Semua Unit --</option>` + units.map(u => `<option value="${u}">${u}</option>`).join('');
+    }
+
+    renderManajemenUserTable();
+
+    const btnRefresh = document.getElementById('btn-refresh-user');
+    if (btnRefresh) {
+        btnRefresh.onclick = async () => {
+            _isUsersCacheLoaded = false;
+            await initManajemenUser(true);
+            showToast("Data user berhasil diperbarui!", "success");
+        };
+    }
+
+    const btnTambah = document.getElementById('btn-tambah-user');
+    if (btnTambah) {
+        btnTambah.onclick = () => openUserFormModal();
+    }
+
+    const btnUploadCsv = document.getElementById('btn-upload-csv-user');
+    if (btnUploadCsv) {
+        btnUploadCsv.onclick = () => openCsvUserUploadModal();
+    }
+
+    const searchInput = document.getElementById('search-user-text');
+    if (searchInput) {
+        searchInput.oninput = () => { _userCurrentPage = 1; renderManajemenUserTable(); };
+    }
+
+    const filterLevel = document.getElementById('filter-user-level');
+    if (filterLevel) {
+        filterLevel.onchange = () => { _userCurrentPage = 1; renderManajemenUserTable(); };
+    }
+
+    const filterUnit = document.getElementById('filter-user-unit');
+    if (filterUnit) {
+        filterUnit.onchange = () => { _userCurrentPage = 1; renderManajemenUserTable(); };
+    }
+
+    const formUser = document.getElementById('form-user-data');
+    if (formUser) {
+        formUser.onsubmit = async (e) => {
+            e.preventDefault();
+            await saveUserDataFromModal();
+        };
+    }
+
+    const btnCloseUser = document.getElementById('btn-close-modal-user');
+    const btnBatalUser = document.getElementById('btn-batal-user-form');
+    if (btnCloseUser) btnCloseUser.onclick = closeUserFormModal;
+    if (btnBatalUser) btnBatalUser.onclick = closeUserFormModal;
+
+    setupCsvUserModalEvents();
+}
+
+function renderManajemenUserTable() {
+    const tbody = document.getElementById('tbody-manajemen-user');
+    if (!tbody) return;
+
+    const searchText = (document.getElementById('search-user-text')?.value || '').toLowerCase().trim();
+    const filterLevel = document.getElementById('filter-user-level')?.value || '';
+    const filterUnit = document.getElementById('filter-user-unit')?.value || '';
+
+    let filtered = _allUsersManagementList.filter(u => {
+        const nipStr = String(u.nip || '').toLowerCase();
+        const namaStr = String(u.nama || '').toLowerCase();
+        const jbtStr = String(u.jabatan || '').toLowerCase();
+        const unitStr = String(u.unit || '').toLowerCase();
+
+        const matchSearch = !searchText || nipStr.includes(searchText) || namaStr.includes(searchText) || jbtStr.includes(searchText) || unitStr.includes(searchText);
+        const matchLevel = !filterLevel || u.level === filterLevel || (filterLevel === 'Staff' && (u.level === 'Staff' || u.level === 'Pelaksana'));
+        const matchUnit = !filterUnit || u.unit === filterUnit;
+
+        return matchSearch && matchLevel && matchUnit;
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center" style="padding:30px; color:#94a3b8;"><i class="fas fa-users-slash fa-2x mb-2 display-block"></i><br>Tidak ada data user yang sesuai.</td></tr>`;
+        renderUserPagination(0);
+        return;
+    }
+
+    const totalPages = Math.ceil(filtered.length / _userRowsPerPage);
+    if (_userCurrentPage > totalPages) _userCurrentPage = totalPages;
+
+    const startIdx = (_userCurrentPage - 1) * _userRowsPerPage;
+    const pagedUsers = filtered.slice(startIdx, startIdx + _userRowsPerPage);
+
+    tbody.innerHTML = pagedUsers.map((u, idx) => {
+        const no = startIdx + idx + 1;
+        const isSuperAdminUser = u.level === 'Super Admin' || u.nip === '1001';
+        const levelBadgeClass = u.level === 'Super Admin' ? 'badge-danger'
+            : u.level === 'Direktur' ? 'badge-primary'
+            : u.level === 'General Manager' ? 'badge-warning'
+            : u.level === 'Manager' ? 'badge-info'
+            : 'badge-secondary';
+
+        return `
+            <tr>
+                <td style="text-align:center; font-weight:600;">${no}</td>
+                <td style="font-family:monospace; font-weight:600; color:#1e293b;">${u.nip}</td>
+                <td style="font-weight:600; color:#0f172a;">${u.nama}</td>
+                <td><span class="badge ${levelBadgeClass}">${u.level}</span></td>
+                <td>${u.jabatan}</td>
+                <td>${u.unit}</td>
+                <td style="font-size:0.8rem; font-family:monospace;">${u.atasan1 || '-'}</td>
+                <td style="font-size:0.8rem; font-family:monospace;">${u.atasan2 || '-'}</td>
+                <td style="text-align:center;">
+                    <button class="btn-sm btn-secondary" onclick="editUserByNip('${u.nip}')" title="Edit User" style="padding:3px 8px; margin-right:4px;">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    ${!isSuperAdminUser ? `
+                    <button class="btn-sm btn-danger" onclick="deleteUserByNip('${u.nip}')" title="Hapus User" style="padding:3px 8px; background:#ef4444; color:white; border:none; border-radius:4px; cursor:pointer;">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    ` : ''}
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    renderUserPagination(filtered.length);
+}
+
+function renderUserPagination(totalItems) {
+    const container = document.getElementById('user-pagination-container');
+    if (!container) return;
+
+    if (totalItems === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const totalPages = Math.ceil(totalItems / _userRowsPerPage);
+    const startItem = (_userCurrentPage - 1) * _userRowsPerPage + 1;
+    const endItem = Math.min(_userCurrentPage * _userRowsPerPage, totalItems);
+
+    let pageButtons = '';
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= _userCurrentPage - 1 && i <= _userCurrentPage + 1)) {
+            pageButtons += `<button class="btn-sm ${i === _userCurrentPage ? 'btn-primary' : 'btn-secondary'}" style="padding:4px 10px; font-size:0.8rem;" onclick="changeUserPage(${i})">${i}</button>`;
+        } else if (i === _userCurrentPage - 2 || i === _userCurrentPage + 2) {
+            pageButtons += `<span style="padding:0 4px;">...</span>`;
+        }
+    }
+
+    container.innerHTML = `
+        <div>Menampilkan ${startItem} - ${endItem} dari <strong>${totalItems}</strong> User</div>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <button class="btn-sm btn-secondary" style="padding:4px 10px; font-size:0.8rem;" ${_userCurrentPage === 1 ? 'disabled' : ''} onclick="changeUserPage(${_userCurrentPage - 1})">Prev</button>
+            ${pageButtons}
+            <button class="btn-sm btn-secondary" style="padding:4px 10px; font-size:0.8rem;" ${_userCurrentPage === totalPages ? 'disabled' : ''} onclick="changeUserPage(${_userCurrentPage + 1})">Next</button>
+        </div>
+    `;
+}
+
+function changeUserPage(page) {
+    _userCurrentPage = page;
+    renderManajemenUserTable();
+}
+
+function openUserFormModal(userData = null) {
+    const modal = document.getElementById('modal-user-form');
+    const title = document.getElementById('modal-user-title');
+    if (!modal) return;
+
+    if (userData) {
+        title.innerHTML = `<i class="fas fa-user-edit"></i> Edit Data User: ${userData.nama}`;
+        document.getElementById('user-form-id').value = userData.nip;
+        document.getElementById('user-input-nip').value = userData.nip;
+        document.getElementById('user-input-nip').readOnly = true;
+        document.getElementById('user-input-password').value = userData.password || '';
+        document.getElementById('user-input-nama').value = userData.nama || '';
+        document.getElementById('user-input-level').value = userData.level || 'Staff';
+        document.getElementById('user-input-jabatan').value = userData.jabatan || '';
+        document.getElementById('user-input-unit').value = userData.unit || '';
+        document.getElementById('user-input-atasan1').value = userData.atasan1 || '';
+        document.getElementById('user-input-atasan2').value = userData.atasan2 || '';
+    } else {
+        title.innerHTML = `<i class="fas fa-user-plus"></i> Tambah User Baru`;
+        document.getElementById('form-user-data').reset();
+        document.getElementById('user-form-id').value = '';
+        document.getElementById('user-input-nip').readOnly = false;
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeUserFormModal() {
+    const modal = document.getElementById('modal-user-form');
+    if (modal) modal.style.display = 'none';
+}
+
+function editUserByNip(nip) {
+    const user = _allUsersManagementList.find(u => String(u.nip) === String(nip));
+    if (user) openUserFormModal(user);
+}
+
+async function deleteUserByNip(nip) {
+    const user = _allUsersManagementList.find(u => String(u.nip) === String(nip));
+    if (user && (user.level === 'Super Admin' || user.nip === '1001')) {
+        showToast("User dengan level Super Admin tidak dapat dihapus demi keamanan sistem.", "warning");
+        return;
+    }
+
+    if (!confirm(`Apakah Anda yakin ingin menghapus user NIP ${nip}?`)) return;
+
+    const res = await fetchSupabaseAPI('deleteUser', { nip });
+    if (res && res.success) {
+        showToast(`User NIP ${nip} berhasil dihapus!`, 'success');
+        _isUsersCacheLoaded = false;
+        await initManajemenUser(true);
+    } else {
+        showToast(res ? res.message : "Gagal menghapus user", 'danger');
+    }
+}
+
+async function saveUserDataFromModal() {
+    const nip = document.getElementById('user-input-nip').value.trim();
+    const password = document.getElementById('user-input-password').value.trim() || nip;
+    const nama = document.getElementById('user-input-nama').value.trim();
+    const level = document.getElementById('user-input-level').value;
+    const jabatan = document.getElementById('user-input-jabatan').value.trim();
+    const unit = document.getElementById('user-input-unit').value.trim();
+    const atasan1 = document.getElementById('user-input-atasan1').value.trim();
+    const atasan2 = document.getElementById('user-input-atasan2').value.trim();
+
+    const userData = { nip, password, nama, level, jabatan, unit, atasan1, atasan2 };
+
+    const btnSimpan = document.getElementById('btn-simpan-user-form');
+    if (btnSimpan) {
+        btnSimpan.disabled = true;
+        btnSimpan.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Menyimpan...`;
+    }
+
+    const res = await fetchSupabaseAPI('saveUser', { userData });
+
+    if (btnSimpan) {
+        btnSimpan.disabled = false;
+        btnSimpan.innerHTML = `<i class="fas fa-save"></i> Simpan User`;
+    }
+
+    if (res && res.success) {
+        showToast(`User ${nama} (NIP: ${nip}) berhasil disimpan!`, 'success');
+        closeUserFormModal();
+        _isUsersCacheLoaded = false;
+        await initManajemenUser(true);
+    } else {
+        showToast(res ? res.message : "Gagal menyimpan user", 'danger');
+    }
+}
+
+// --- CSV USER UPLOAD LOGIC ---
+function openCsvUserUploadModal() {
+    const modal = document.getElementById('modal-upload-csv-user');
+    if (!modal) return;
+    document.getElementById('file-input-csv-user').value = '';
+    const preview = document.getElementById('csv-user-preview-area');
+    if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+    const btnProses = document.getElementById('btn-proses-csv-user');
+    if (btnProses) btnProses.disabled = true;
+    _pendingCsvUsersToImport = [];
+    modal.style.display = 'flex';
+}
+
+function closeCsvUserUploadModal() {
+    const modal = document.getElementById('modal-upload-csv-user');
+    if (modal) modal.style.display = 'none';
+}
+
+function setupCsvUserModalEvents() {
+    const fileInput = document.getElementById('file-input-csv-user');
+    const previewArea = document.getElementById('csv-user-preview-area');
+    const btnProses = document.getElementById('btn-proses-csv-user');
+    const btnClose = document.getElementById('btn-close-modal-csv-user');
+    const btnBatal = document.getElementById('btn-batal-csv-user');
+
+    if (btnClose) btnClose.onclick = closeCsvUserUploadModal;
+    if (btnBatal) btnBatal.onclick = closeCsvUserUploadModal;
+
+    if (fileInput) {
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const text = evt.target.result;
+                const rows = parseCSVText(text);
+                if (rows.length < 2) {
+                    showToast("File CSV kosong atau format tidak sesuai.", "danger");
+                    return;
+                }
+
+                const rawHeaders = rows[0].map(h => String(h || '').trim());
+                const cleanHeaders = rawHeaders.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                const getCol = (names) => {
+                    return cleanHeaders.findIndex(ch => names.some(n => {
+                        const cleanN = n.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        return ch === cleanN || ch.includes(cleanN);
+                    }));
+                };
+
+                const idxNip = cleanHeaders.findIndex(ch => ch === 'nip' || ch === 'nipuser' || ch === 'nippegawai');
+                const idxPass = getCol(['password', 'pass']);
+                const idxNama = getCol(['nama', 'name']);
+                const idxLevel = getCol(['level', 'role']);
+                const idxJabatan = getCol(['jabatan', 'position']);
+                const idxUnit = getCol(['unit', 'dept', 'departemen']);
+                const idxAtasan1 = getCol(['atasannip1', 'atasan1', 'verifikator1', 'penilai1']);
+                const idxAtasan2 = getCol(['atasannip2', 'atasan2', 'verifikator2', 'penilai2']);
+
+                const parsedUsers = [];
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    const nip = idxNip >= 0 ? String(row[idxNip] || '').trim() : '';
+                    if (!nip) continue;
+
+                    const password = idxPass >= 0 ? String(row[idxPass] || '').trim() : nip;
+                    const nama = idxNama >= 0 ? String(row[idxNama] || '').trim() : nip;
+                    const level = idxLevel >= 0 ? String(row[idxLevel] || '').trim() : 'Staff';
+                    const jabatan = idxJabatan >= 0 ? String(row[idxJabatan] || '').trim() : '-';
+                    const unit = idxUnit >= 0 ? String(row[idxUnit] || '').trim() : '-';
+                    const atasan1 = idxAtasan1 >= 0 ? String(row[idxAtasan1] || '').trim() : '';
+                    const atasan2 = idxAtasan2 >= 0 ? String(row[idxAtasan2] || '').trim() : '';
+
+                    parsedUsers.push({ nip, password: password || nip, nama, level, jabatan, unit, atasan1, atasan2 });
+                }
+
+                _pendingCsvUsersToImport = parsedUsers;
+
+                if (parsedUsers.length > 0) {
+                    if (previewArea) {
+                        previewArea.style.display = 'block';
+                        previewArea.innerHTML = `
+                            <p style="margin:0 0 6px; font-weight:600; color:#10b981;">✓ Terbaca ${parsedUsers.length} data user:</p>
+                            <table class="table table-bordered mb-0" style="font-size:0.75rem;">
+                                <thead><tr><th>NIP</th><th>Nama</th><th>Level</th><th>Jabatan</th><th>Unit</th><th>Atasan 1</th><th>Atasan 2</th></tr></thead>
+                                <tbody>
+                                    ${parsedUsers.slice(0, 5).map(u => `<tr><td>${u.nip}</td><td>${u.nama}</td><td>${u.level}</td><td>${u.jabatan}</td><td>${u.unit}</td><td style="font-family:monospace; color:#2563eb;">${u.atasan1 || '-'}</td><td style="font-family:monospace; color:#2563eb;">${u.atasan2 || '-'}</td></tr>`).join('')}
+                                    ${parsedUsers.length > 5 ? `<tr><td colspan="7" class="text-center text-muted">...dan ${parsedUsers.length - 5} data lainnya</td></tr>` : ''}
+                                </tbody>
+                            </table>
+                        `;
+                    }
+                    if (btnProses) btnProses.disabled = false;
+                } else {
+                    showToast("Gagal membaca kolom NIP dari file CSV.", "danger");
+                    if (btnProses) btnProses.disabled = true;
+                }
+            };
+            reader.readAsText(file);
+        };
+    }
+
+    if (btnProses) {
+        btnProses.onclick = async () => {
+            if (_pendingCsvUsersToImport.length === 0) return;
+
+            btnProses.disabled = true;
+            btnProses.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Mengimpor ke Supabase...`;
+
+            const res = await fetchSupabaseAPI('saveBatchUsers', { userList: _pendingCsvUsersToImport });
+
+            btnProses.disabled = false;
+            btnProses.innerHTML = `<i class="fas fa-upload"></i> Impor Sekarang ke Supabase`;
+
+            if (res && res.success) {
+                showToast(`🎉 Berhasil mengimpor ${_pendingCsvUsersToImport.length} data user ke Supabase!`, 'success');
+                closeCsvUserUploadModal();
+                _isUsersCacheLoaded = false;
+                await initManajemenUser(true);
+            } else {
+                showToast(res ? res.message : "Gagal mengimpor data user", 'danger');
+            }
+        };
+    }
+}
+
+// --- CSV SKI UPLOAD LOGIC ---
+let _pendingCsvSkisToImport = [];
+
+function setupCsvSkiModalEvents() {
+    const btnUpload = document.getElementById('btn-upload-csv-ski');
+    const modal = document.getElementById('modal-upload-csv-ski');
+    const btnClose = document.getElementById('btn-close-modal-csv-ski');
+    const btnBatal = document.getElementById('btn-batal-csv-ski');
+    const fileInput = document.getElementById('file-input-csv-ski');
+    const previewArea = document.getElementById('csv-ski-preview-area');
+    const btnProses = document.getElementById('btn-proses-csv-ski');
+
+    if (btnUpload) {
+        btnUpload.onclick = () => {
+            if (modal) {
+                fileInput.value = '';
+                if (previewArea) { previewArea.style.display = 'none'; previewArea.innerHTML = ''; }
+                if (btnProses) btnProses.disabled = true;
+                _pendingCsvSkisToImport = [];
+                modal.style.display = 'flex';
+            }
+        };
+    }
+
+    if (btnClose) btnClose.onclick = () => { if (modal) modal.style.display = 'none'; };
+    if (btnBatal) btnBatal.onclick = () => { if (modal) modal.style.display = 'none'; };
+
+    if (fileInput) {
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const text = evt.target.result;
+                const rows = parseCSVText(text);
+                if (rows.length < 2) {
+                    showToast("File CSV kosong atau format tidak sesuai.", "danger");
+                    return;
+                }
+
+                const cleanHeader = h => String(h || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                const normalizedHeaders = rows[0].map(cleanHeader);
+
+                const getColExact = (...candidates) => {
+                    for (const cand of candidates) {
+                        const cleanCand = cleanHeader(cand);
+                        const idx = normalizedHeaders.findIndex(h => h === cleanCand);
+                        if (idx !== -1) return idx;
+                    }
+                    for (const cand of candidates) {
+                        const cleanCand = cleanHeader(cand);
+                        if (cleanCand.length > 3) {
+                            const idx = normalizedHeaders.findIndex(h => h.includes(cleanCand));
+                            if (idx !== -1) return idx;
+                        }
+                    }
+                    return -1;
+                };
+
+                const idxUnit = getColExact('targetunit', 'unit');
+                const idxLevel = getColExact('targetlevel', 'leveljabatan', 'level');
+                const idxJabatan = getColExact('targetjabatan', 'jabatan');
+                const idxKpi = getColExact('kpidepartemen', 'kpi');
+                const idxSki = getColExact('ski', 'sasarankerja', 'sasaran');
+                const idxDetail = getColExact('targetdetail', 'detail');
+                const idxK1 = getColExact('kriteria1', 'k1');
+                const idxK2 = getColExact('kriteria2', 'k2');
+                const idxK3 = getColExact('kriteria3', 'k3');
+                const idxK4 = getColExact('kriteria4', 'k4');
+                const idxK5 = getColExact('kriteria5', 'k5');
+                const idxBobot = getColExact('bobot', 'weight');
+
+                const parsedSkis = [];
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    const skiText = idxSki >= 0 ? String(row[idxSki] || '').trim() : '';
+                    if (!skiText) continue;
+
+                    let rawBobot = idxBobot >= 0 ? String(row[idxBobot] || '0').replace('%', '').replace(',', '.').trim() : '0';
+                    let bobotVal = parseFloat(rawBobot);
+                    if (isNaN(bobotVal)) bobotVal = 0;
+                    if (bobotVal > 0 && bobotVal <= 1) {
+                        bobotVal = Math.round(bobotVal * 100 * 100) / 100;
+                    } else {
+                        bobotVal = Math.round(bobotVal * 100) / 100;
+                    }
+
+                    parsedSkis.push({
+                        createdByNIP: currentUser ? currentUser.nip : '1001',
+                        targetUnit: idxUnit >= 0 ? String(row[idxUnit] || '').trim() : '',
+                        targetLevel: idxLevel >= 0 ? String(row[idxLevel] || '').trim() : '',
+                        targetJabatan: idxJabatan >= 0 ? String(row[idxJabatan] || '').trim() : '',
+                        kpiDepartemen: idxKpi >= 0 ? String(row[idxKpi] || '').trim() : '',
+                        ski: skiText,
+                        targetDetail: idxDetail >= 0 ? String(row[idxDetail] || '').trim() : '',
+                        kriteria1: idxK1 >= 0 ? String(row[idxK1] || '').trim() : '',
+                        kriteria2: idxK2 >= 0 ? String(row[idxK2] || '').trim() : '',
+                        kriteria3: idxK3 >= 0 ? String(row[idxK3] || '').trim() : '',
+                        kriteria4: idxK4 >= 0 ? String(row[idxK4] || '').trim() : '',
+                        kriteria5: idxK5 >= 0 ? String(row[idxK5] || '').trim() : '',
+                        bobot: bobotVal
+                    });
+                }
+
+                _pendingCsvSkisToImport = parsedSkis;
+
+                if (parsedSkis.length > 0) {
+                    if (previewArea) {
+                        previewArea.style.display = 'block';
+                        previewArea.innerHTML = `
+                            <p style="margin:0 0 6px; font-weight:600; color:#10b981;">✓ Terbaca ${parsedSkis.length} item SKI:</p>
+                            <table class="table table-bordered mb-0" style="font-size:0.75rem;">
+                                <thead><tr><th>Unit</th><th>Jabatan</th><th>SKI</th><th>Bobot</th></tr></thead>
+                                <tbody>
+                                    ${parsedSkis.slice(0, 5).map(s => `<tr><td>${s.targetUnit}</td><td>${s.targetJabatan}</td><td>${s.ski}</td><td>${s.bobot}%</td></tr>`).join('')}
+                                    ${parsedSkis.length > 5 ? `<tr><td colspan="4" class="text-center text-muted">...dan ${parsedSkis.length - 5} data SKI lainnya</td></tr>` : ''}
+                                </tbody>
+                            </table>
+                        `;
+                    }
+                    if (btnProses) btnProses.disabled = false;
+                } else {
+                    showToast("Gagal membaca kolom SKI dari file CSV.", "danger");
+                    if (btnProses) btnProses.disabled = true;
+                }
+            };
+            reader.readAsText(file);
+        };
+    }
+
+    if (btnProses) {
+        btnProses.onclick = async () => {
+            if (_pendingCsvSkisToImport.length === 0) return;
+
+            btnProses.disabled = true;
+            btnProses.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Mengimpor SKI ke Supabase...`;
+
+            const res = await fetchSupabaseAPI('saveBatchSKI', { skiList: _pendingCsvSkisToImport, clearExisting: true });
+
+            btnProses.disabled = false;
+            btnProses.innerHTML = `<i class="fas fa-upload"></i> Impor SKI ke Supabase`;
+
+            if (res && res.success) {
+                showToast(`🎉 Berhasil mengimpor ${_pendingCsvSkisToImport.length} data Master SKI ke Supabase!`, 'success');
+                if (modal) modal.style.display = 'none';
+                _isSkisDataLoaded = false;
+                await initDaftarSki(true);
+            } else {
+                showToast(res ? res.message : "Gagal mengimpor data SKI", 'danger');
+            }
+        };
+    }
+}
