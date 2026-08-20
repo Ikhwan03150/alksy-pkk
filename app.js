@@ -310,9 +310,32 @@ async function fetchSupabaseAPI(action, payload = {}) {
 
         if (action === 'saveBatchSKI') {
             const list = payload.skiList || [];
-            if (payload.clearExisting) {
-                const { error: delErr } = await sb.from('skis').delete().neq('id', 0);
-                if (delErr) console.warn("Notice: Clear existing SKIs before re-import:", delErr);
+            if (list.length === 0) return { success: true };
+
+            // Jika replaceExistingGroup tidak diset false (default true),
+            // perbarui (replace) data SKI lama HANYA untuk kombinasi (Unit + Level + Jabatan) yang ada di file upload
+            if (payload.replaceExistingGroup !== false) {
+                const uniqueGroups = [];
+                list.forEach(ski => {
+                    const u = (ski.targetUnit || '').trim();
+                    const l = (ski.targetLevel || '').trim();
+                    const j = (ski.targetJabatan || '').trim();
+                    if (u || l || j) {
+                        const key = `${u}||${l}||${j}`;
+                        if (!uniqueGroups.some(g => g.key === key)) {
+                            uniqueGroups.push({ key, unit: u, level: l, jabatan: j });
+                        }
+                    }
+                });
+
+                for (const group of uniqueGroups) {
+                    let q = sb.from('skis').delete();
+                    if (group.unit) q = q.eq('target_unit', group.unit);
+                    if (group.level) q = q.eq('target_level', group.level);
+                    if (group.jabatan) q = q.eq('target_jabatan', group.jabatan);
+                    const { error: delErr } = await q;
+                    if (delErr) console.warn("Notice: Clear existing SKI group before update:", delErr);
+                }
             }
 
             const updates = [];
@@ -3853,19 +3876,22 @@ async function initDaftarSki(forceRefresh = false) {
                             `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:4px 10px; border-radius:12px; font-weight:700; font-size:0.78rem; display:inline-flex; align-items:center; gap:4px; white-space:nowrap;"><i class="fas fa-clock"></i> ${roundedBobot}% (Draf)</span>`
                         }
                     </td>
-                    <td style="text-align:center; white-space:nowrap;">
-                        <div style="display:inline-flex; align-items:center; justify-content:center; gap:4px;">
-                            <button style="background:#f0f9ff; color:#0369a1; border:1px solid #bae6fd; padding:4px 8px; border-radius:6px; font-weight:600; font-size:0.75rem; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" onclick="viewGroupSki('${encodeURIComponent(g.key)}')" title="Preview / Lihat SKI Jabatan Ini">
+                    <td style="text-align:center; white-space:nowrap; vertical-align:middle;">
+                        <div style="display:inline-flex; align-items:center; justify-content:center; gap:5px; flex-wrap:nowrap;">
+                            <button style="background:#f0f9ff; color:#0369a1; border:1px solid #bae6fd; padding:5px 9px; border-radius:7px; font-weight:600; font-size:0.75rem; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" onclick="viewGroupSki('${encodeURIComponent(g.key)}')" title="Preview / Lihat SKI Jabatan Ini">
                                 <i class="fas fa-eye"></i> Lihat
                             </button>
+                            <button style="background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; width:29px; height:29px; border-radius:7px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" onclick="downloadSingleGroupSKI('${encodeURIComponent(g.key)}')" title="Download File Excel SKI Jabatan Ini">
+                                <i class="fas fa-file-excel" style="font-size:0.8rem; color:#16a34a;"></i>
+                            </button>
                             ${canEditGroup ? `
-                                <button style="background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; padding:4px 8px; border-radius:6px; font-weight:600; font-size:0.75rem; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" onclick="editGroupSki('${encodeURIComponent(g.key)}')" title="Edit Template SKI">
+                                <button style="background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; padding:5px 9px; border-radius:7px; font-weight:600; font-size:0.75rem; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" onclick="editGroupSki('${encodeURIComponent(g.key)}')" title="Edit Template SKI">
                                     <i class="fas fa-edit"></i> Edit
                                 </button>
-                                <button style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; width:28px; height:28px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" onclick="duplicateGroupSki('${encodeURIComponent(g.key)}')" title="Duplikat Template SKI Ini">
+                                <button style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; width:29px; height:29px; border-radius:7px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" onclick="duplicateGroupSki('${encodeURIComponent(g.key)}')" title="Duplikat Template SKI Ini">
                                     <i class="fas fa-copy" style="font-size:0.75rem;"></i>
                                 </button>
-                                <button style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; width:28px; height:28px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" onclick="deleteGroupSki('${encodeURIComponent(g.key)}')" title="Hapus Template Jabatan Ini">
+                                <button style="background:#fee2e2; color:#ef4444; border:1px solid #fca5a5; width:29px; height:29px; border-radius:7px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" onclick="deleteGroupSki('${encodeURIComponent(g.key)}')" title="Hapus Template Jabatan Ini">
                                     <i class="fas fa-trash" style="font-size:0.75rem;"></i>
                                 </button>
                             ` : ''}
@@ -4189,6 +4215,77 @@ window.editGroupSki = (encodedKey) => {
 
     modal.style.display = 'flex';
     updateModalEditTotalBobot();
+};
+
+window.downloadSingleGroupSKI = (encodedKey) => {
+    if (typeof XLSX === 'undefined') {
+        showToast("Pustaka XLSX (SheetJS) belum dimuat. Periksa koneksi internet Anda.", "danger");
+        return;
+    }
+
+    const key = decodeURIComponent(encodedKey);
+    const items = _allSkisData.filter(item => {
+        const u = item.targetUnit || '-';
+        const l = item.targetLevel || '-';
+        const j = item.targetJabatan || '-';
+        return `${u}||${l}||${j}` === key;
+    });
+
+    if (!items || items.length === 0) {
+        showToast("Data SKI untuk jabatan ini tidak ditemukan.", "danger");
+        return;
+    }
+
+    const first = items[0];
+    const unitName = first.targetUnit || 'Unit';
+    const levelName = first.targetLevel || 'Level';
+    const jabatanName = first.targetJabatan || 'Jabatan';
+
+    const exportRows = items.map(item => {
+        let b = parseFloat(item.bobot) || 0;
+        let bobotVal = (b <= 1 && b > 0) ? Math.round(b * 100 * 100) / 100 : Math.round(b * 100) / 100;
+
+        return {
+            "Target Unit": item.targetUnit || '',
+            "Target Level": item.targetLevel || '',
+            "Target Jabatan": item.targetJabatan || '',
+            "KPI Departemen": item.kpiDepartemen || '',
+            "SKI": item.ski || '',
+            "Target Detail": item.targetDetail || '',
+            "Kriteria 1": item.kriteria1 || '',
+            "Kriteria 2": item.kriteria2 || '',
+            "Kriteria 3": item.kriteria3 || '',
+            "Kriteria 4": item.kriteria4 || '',
+            "Kriteria 5": item.kriteria5 || '',
+            "Bobot (%)": bobotVal
+        };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+
+    worksheet['!cols'] = [
+        { wch: 18 }, // Target Unit
+        { wch: 15 }, // Target Level
+        { wch: 22 }, // Target Jabatan
+        { wch: 25 }, // KPI Departemen
+        { wch: 35 }, // SKI
+        { wch: 45 }, // Target Detail
+        { wch: 35 }, // Kriteria 1
+        { wch: 35 }, // Kriteria 2
+        { wch: 35 }, // Kriteria 3
+        { wch: 35 }, // Kriteria 4
+        { wch: 35 }, // Kriteria 5
+        { wch: 12 }  // Bobot (%)
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    const rawSheetName = `SKI_${unitName}_${jabatanName}`.replace(/[^a-zA-Z0-9 ]/g, '').substring(0, 31);
+    XLSX.utils.book_append_sheet(workbook, worksheet, rawSheetName || "Data SKI");
+
+    const cleanFilename = `SKI_${unitName}_${levelName}_${jabatanName}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    XLSX.writeFile(workbook, `${cleanFilename}.xlsx`);
+
+    showToast(`File Excel SKI (${unitName} - ${jabatanName}) berhasil di-download!`, "success");
 };
 
 window.viewGroupSki = (encodedKey) => {
@@ -4976,7 +5073,7 @@ function renderManajemenUserTable() {
     });
 
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="text-center" style="padding:30px; color:#94a3b8;"><i class="fas fa-users-slash fa-2x mb-2 display-block"></i><br>Tidak ada data user yang sesuai.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="padding:30px; color:#94a3b8;"><i class="fas fa-users-slash fa-2x mb-2 display-block"></i><br>Tidak ada data user yang sesuai.</td></tr>`;
         renderUserPagination(0);
         return;
     }
@@ -4996,22 +5093,33 @@ function renderManajemenUserTable() {
             : u.level === 'Manager' ? 'badge-info'
             : 'badge-secondary';
 
+        let atasanHtml = '<span style="color:#94a3b8;">-</span>';
+        if (u.atasan1 || u.atasan2) {
+            let parts = [];
+            if (u.atasan1) parts.push(`<div style="font-size:0.75rem; font-family:monospace;"><span style="color:#64748b; font-weight:600;">A1:</span> ${u.atasan1}</div>`);
+            if (u.atasan2) parts.push(`<div style="font-size:0.75rem; font-family:monospace;"><span style="color:#64748b; font-weight:600;">A2:</span> ${u.atasan2}</div>`);
+            atasanHtml = parts.join('');
+        }
+
         return `
             <tr>
-                <td style="text-align:center; font-weight:600;">${no}</td>
-                <td style="font-family:monospace; font-weight:600; color:#1e293b;">${u.nip}</td>
-                <td style="font-weight:600; color:#0f172a;">${u.nama}</td>
-                <td><span class="badge ${levelBadgeClass}">${u.level}</span></td>
-                <td>${u.jabatan}</td>
-                <td>${u.unit}</td>
-                <td style="font-size:0.8rem; font-family:monospace;">${u.atasan1 || '-'}</td>
-                <td style="font-size:0.8rem; font-family:monospace;">${u.atasan2 || '-'}</td>
-                <td style="text-align:center;">
-                    <button class="btn-sm btn-secondary" onclick="editUserByNip('${u.nip}')" title="Edit User" style="padding:3px 8px; margin-right:4px;">
+                <td style="text-align:center; font-weight:600; vertical-align:middle;">${no}</td>
+                <td style="vertical-align:middle;" class="cell-wrap">
+                    <div style="font-weight:700; color:#0f172a; font-size:0.84rem;">${u.nama}</div>
+                    <div style="font-size:0.73rem; color:#64748b; font-family:monospace; margin-top:1px;">NIP: ${u.nip}</div>
+                </td>
+                <td style="white-space:nowrap; vertical-align:middle;"><span class="badge ${levelBadgeClass}">${u.level}</span></td>
+                <td style="vertical-align:middle;" class="cell-wrap">
+                    <div style="font-weight:600; color:#1e293b;">${u.jabatan}</div>
+                    <div style="font-size:0.73rem; color:#0369a1; margin-top:1px;"><i class="fas fa-building" style="font-size:0.7rem;"></i> ${u.unit}</div>
+                </td>
+                <td style="vertical-align:middle; white-space:nowrap;">${atasanHtml}</td>
+                <td style="text-align:center; white-space:nowrap; vertical-align:middle;">
+                    <button class="btn-sm btn-secondary" onclick="editUserByNip('${u.nip}')" title="Edit User" style="padding:4px 8px; margin-right:2px; font-size:0.75rem;">
                         <i class="fas fa-edit"></i>
                     </button>
                     ${!isSuperAdminUser ? `
-                    <button class="btn-sm btn-danger" onclick="deleteUserByNip('${u.nip}')" title="Hapus User" style="padding:3px 8px; background:#ef4444; color:white; border:none; border-radius:4px; cursor:pointer;">
+                    <button class="btn-sm btn-danger" onclick="deleteUserByNip('${u.nip}')" title="Hapus User" style="padding:4px 8px; background:#ef4444; color:white; border:none; border-radius:6px; cursor:pointer; font-size:0.75rem;">
                         <i class="fas fa-trash"></i>
                     </button>
                     ` : ''}
@@ -5278,10 +5386,102 @@ function setupCsvUserModalEvents() {
     }
 }
 
-// --- CSV SKI UPLOAD LOGIC ---
+// --- SKI EXCEL TEMPLATE & UPLOAD LOGIC ---
+
+function downloadTemplateSKIExcel() {
+    if (typeof XLSX === 'undefined') {
+        showToast("Pustaka XLSX (SheetJS) belum dimuat. Periksa koneksi internet Anda.", "danger");
+        return;
+    }
+
+    const templateData = [
+        {
+            "Target Unit": "SD",
+            "Target Level": "Staff",
+            "Target Jabatan": "Guru SD",
+            "KPI Departemen": "Pendidikan dan Pengajaran",
+            "SKI": "Pelaksanaan Pembelajaran Efektif dan Terstruktur",
+            "Target Detail": "Menyusun RPP, media ajar, dan melaksanakan 100% tatap muka sesuai jadwal",
+            "Kriteria 1": "Tatap muka < 70% atau tidak menyusun RPP",
+            "Kriteria 2": "Tatap muka 70-79% dengan RPP seadanya",
+            "Kriteria 3": "Tatap muka 80-89% dan RPP lengkap",
+            "Kriteria 4": "Tatap muka 90-99% dan RPP + media ajar lengkap",
+            "Kriteria 5": "Tatap muka 100% lengkap RPP, media ajar, & inovasi pembelajaran",
+            "Bobot (%)": 25
+        },
+        {
+            "Target Unit": "SMP",
+            "Target Level": "Staff",
+            "Target Jabatan": "Guru SMP",
+            "KPI Departemen": "Evaluasi & Pelaporan",
+            "SKI": "Input Nilai dan Laporan Hasil Belajar Siswa",
+            "Target Detail": "Menyelesaikan penilaian harian, PTS, dan PAS tepat waktu",
+            "Kriteria 1": "Terlambat > 1 minggu",
+            "Kriteria 2": "Terlambat 4-7 hari",
+            "Kriteria 3": "Terlambat 1-3 hari",
+            "Kriteria 4": "Tepat waktu sesuai deadline",
+            "Kriteria 5": "Selesai lebih cepat dari deadline dengan akurasi 100%",
+            "Bobot (%)": 25
+        },
+        {
+            "Target Unit": "SMA",
+            "Target Level": "Staff",
+            "Target Jabatan": "Guru SMA",
+            "KPI Departemen": "Pembinaan Karakter Siswa",
+            "SKI": "Pelaksanaan Pembiasaan Ibadah dan Karakter Islami",
+            "Target Detail": "Mendampingi sholat dhuha, dzuhur berjamaah, dan muraja'ah harian",
+            "Kriteria 1": "Kehadiran pendampingan < 70%",
+            "Kriteria 2": "Kehadiran pendampingan 70-79%",
+            "Kriteria 3": "Kehadiran pendampingan 80-89%",
+            "Kriteria 4": "Kehadiran pendampingan 90-99%",
+            "Kriteria 5": "Kehadiran 100% & aktif mencatat jurnal pembentukan karakter",
+            "Bobot (%)": 25
+        },
+        {
+            "Target Unit": "SMA",
+            "Target Level": "Staff",
+            "Target Jabatan": "Guru BK SMA & Koordinator Ekstrakurikuler",
+            "KPI Departemen": "Pengembangan Diri & Bimbingan",
+            "SKI": "Keikutsertaan Pelatihan dan Bimbingan Siswa",
+            "Target Detail": "Mengikuti minimal 2 kali pelatihan/seminar per semester",
+            "Kriteria 1": "Tidak mengikuti pelatihan",
+            "Kriteria 2": "Mengikuti 1 pelatihan tanpa sertifikat",
+            "Kriteria 3": "Mengikuti 1 pelatihan bersertifikat",
+            "Kriteria 4": "Mengikuti 2 pelatihan bersertifikat",
+            "Kriteria 5": "Mengikuti > 2 pelatihan & mengimbaskan materi ke sesama guru",
+            "Bobot (%)": 25
+        }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+
+    // Set column widths for comfortable reading
+    worksheet['!cols'] = [
+        { wch: 18 }, // Target Unit
+        { wch: 15 }, // Target Level
+        { wch: 20 }, // Target Jabatan
+        { wch: 25 }, // KPI Departemen
+        { wch: 35 }, // SKI
+        { wch: 45 }, // Target Detail
+        { wch: 35 }, // Kriteria 1
+        { wch: 35 }, // Kriteria 2
+        { wch: 35 }, // Kriteria 3
+        { wch: 35 }, // Kriteria 4
+        { wch: 35 }, // Kriteria 5
+        { wch: 12 }  // Bobot (%)
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Template Master SKI");
+
+    XLSX.writeFile(workbook, "Template_Master_SKI_AlSyukro.xlsx");
+    showToast("Template Excel Master SKI berhasil di-download!", "success");
+}
+
 let _pendingCsvSkisToImport = [];
 
 function setupCsvSkiModalEvents() {
+    const btnDownloadTemplate = document.getElementById('btn-download-template-ski');
     const btnUpload = document.getElementById('btn-upload-csv-ski');
     const modal = document.getElementById('modal-upload-csv-ski');
     const btnClose = document.getElementById('btn-close-modal-csv-ski');
@@ -5290,10 +5490,17 @@ function setupCsvSkiModalEvents() {
     const previewArea = document.getElementById('csv-ski-preview-area');
     const btnProses = document.getElementById('btn-proses-csv-ski');
 
+    if (btnDownloadTemplate) {
+        btnDownloadTemplate.onclick = (e) => {
+            e.preventDefault();
+            downloadTemplateSKIExcel();
+        };
+    }
+
     if (btnUpload) {
         btnUpload.onclick = () => {
             if (modal) {
-                fileInput.value = '';
+                if (fileInput) fileInput.value = '';
                 if (previewArea) { previewArea.style.display = 'none'; previewArea.innerHTML = ''; }
                 if (btnProses) btnProses.disabled = true;
                 _pendingCsvSkisToImport = [];
@@ -5310,12 +5517,12 @@ function setupCsvSkiModalEvents() {
             const file = e.target.files[0];
             if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = (evt) => {
-                const text = evt.target.result;
-                const rows = parseCSVText(text);
-                if (rows.length < 2) {
-                    showToast("File CSV kosong atau format tidak sesuai.", "danger");
+            const filename = file.name.toLowerCase();
+            const isExcel = filename.endsWith('.xlsx') || filename.endsWith('.xls');
+
+            const parseRowsData = (rows) => {
+                if (!rows || rows.length < 2) {
+                    showToast("File kosong atau format data tidak sesuai.", "danger");
                     return;
                 }
 
@@ -5349,15 +5556,17 @@ function setupCsvSkiModalEvents() {
                 const idxK3 = getColExact('kriteria3', 'k3');
                 const idxK4 = getColExact('kriteria4', 'k4');
                 const idxK5 = getColExact('kriteria5', 'k5');
-                const idxBobot = getColExact('bobot', 'weight');
+                const idxBobot = getColExact('bobot', 'weight', 'bobot%');
 
                 const parsedSkis = [];
                 for (let i = 1; i < rows.length; i++) {
                     const row = rows[i];
+                    if (!row || row.length === 0) continue;
+
                     const skiText = idxSki >= 0 ? String(row[idxSki] || '').trim() : '';
                     if (!skiText) continue;
 
-                    let rawBobot = idxBobot >= 0 ? String(row[idxBobot] || '0').replace('%', '').replace(',', '.').trim() : '0';
+                    let rawBobot = idxBobot >= 0 ? String(row[idxBobot] !== undefined ? row[idxBobot] : '0').replace('%', '').replace(',', '.').trim() : '0';
                     let bobotVal = parseFloat(rawBobot);
                     if (isNaN(bobotVal)) bobotVal = 0;
                     if (bobotVal > 0 && bobotVal <= 1) {
@@ -5389,11 +5598,11 @@ function setupCsvSkiModalEvents() {
                     if (previewArea) {
                         previewArea.style.display = 'block';
                         previewArea.innerHTML = `
-                            <p style="margin:0 0 6px; font-weight:600; color:#10b981;">✓ Terbaca ${parsedSkis.length} item SKI:</p>
+                            <p style="margin:0 0 6px; font-weight:600; color:#10b981;">✓ Terbaca ${parsedSkis.length} item SKI dari file (${file.name}):</p>
                             <table class="table table-bordered mb-0" style="font-size:0.75rem;">
                                 <thead><tr><th>Unit</th><th>Jabatan</th><th>SKI</th><th>Bobot</th></tr></thead>
                                 <tbody>
-                                    ${parsedSkis.slice(0, 5).map(s => `<tr><td>${s.targetUnit}</td><td>${s.targetJabatan}</td><td>${s.ski}</td><td>${s.bobot}%</td></tr>`).join('')}
+                                    ${parsedSkis.slice(0, 5).map(s => `<tr><td>${s.targetUnit || '-'}</td><td>${s.targetJabatan || '-'}</td><td>${s.ski}</td><td>${s.bobot}%</td></tr>`).join('')}
                                     ${parsedSkis.length > 5 ? `<tr><td colspan="4" class="text-center text-muted">...dan ${parsedSkis.length - 5} data SKI lainnya</td></tr>` : ''}
                                 </tbody>
                             </table>
@@ -5401,11 +5610,42 @@ function setupCsvSkiModalEvents() {
                     }
                     if (btnProses) btnProses.disabled = false;
                 } else {
-                    showToast("Gagal membaca kolom SKI dari file CSV.", "danger");
+                    showToast("Gagal membaca data SKI dari file. Pastikan kolom SKI diisi.", "danger");
                     if (btnProses) btnProses.disabled = true;
                 }
             };
-            reader.readAsText(file);
+
+            const reader = new FileReader();
+
+            if (isExcel || typeof XLSX !== 'undefined') {
+                reader.onload = (evt) => {
+                    try {
+                        let rows = [];
+                        if (typeof XLSX !== 'undefined') {
+                            const data = new Uint8Array(evt.target.result);
+                            const workbook = XLSX.read(data, { type: 'array' });
+                            const firstSheetName = workbook.SheetNames[0];
+                            const worksheet = workbook.Sheets[firstSheetName];
+                            rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+                        } else {
+                            const text = new TextDecoder("utf-8").decode(evt.target.result);
+                            rows = parseCSVText(text);
+                        }
+                        parseRowsData(rows);
+                    } catch (err) {
+                        console.error("Excel Read Error:", err);
+                        showToast("Gagal membaca file Excel. Pastikan format file valid.", "danger");
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                reader.onload = (evt) => {
+                    const text = evt.target.result;
+                    const rows = parseCSVText(text);
+                    parseRowsData(rows);
+                };
+                reader.readAsText(file);
+            }
         };
     }
 
@@ -5416,7 +5656,7 @@ function setupCsvSkiModalEvents() {
             btnProses.disabled = true;
             btnProses.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Mengimpor SKI ke Supabase...`;
 
-            const res = await fetchSupabaseAPI('saveBatchSKI', { skiList: _pendingCsvSkisToImport, clearExisting: true });
+            const res = await fetchSupabaseAPI('saveBatchSKI', { skiList: _pendingCsvSkisToImport, clearExisting: false });
 
             btnProses.disabled = false;
             btnProses.innerHTML = `<i class="fas fa-upload"></i> Impor SKI ke Supabase`;
