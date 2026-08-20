@@ -3695,6 +3695,18 @@ async function initDaftarSki(forceRefresh = false) {
         }
     }
 
+    // Tampilkan tombol Download Semua SKI khusus untuk Super Admin
+    const btnDownloadAll = document.getElementById('btn-download-all-ski');
+    if (btnDownloadAll) {
+        const isSuperAdmin = (currentUser.level === 'Super Admin' || currentUser.nip === '1001');
+        if (isSuperAdmin) {
+            btnDownloadAll.style.display = 'inline-flex';
+            btnDownloadAll.onclick = () => window.downloadAllSkisExcel();
+        } else {
+            btnDownloadAll.style.display = 'none';
+        }
+    }
+
     if (btnRefresh) {
         btnRefresh.onclick = async () => {
             btnRefresh.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memuat...';
@@ -4286,6 +4298,69 @@ window.downloadSingleGroupSKI = (encodedKey) => {
     XLSX.writeFile(workbook, `${cleanFilename}.xlsx`);
 
     showToast(`File Excel SKI (${unitName} - ${jabatanName}) berhasil di-download!`, "success");
+};
+
+window.downloadAllSkisExcel = () => {
+    if (typeof XLSX === 'undefined') {
+        showToast("Pustaka XLSX (SheetJS) belum dimuat. Periksa koneksi internet Anda.", "danger");
+        return;
+    }
+
+    if (!currentUser || (currentUser.level !== 'Super Admin' && currentUser.nip !== '1001')) {
+        showToast("Akses ditolak. Fitur ini khusus untuk Super Admin.", "danger");
+        return;
+    }
+
+    if (!_allSkisData || _allSkisData.length === 0) {
+        showToast("Belum ada data SKI yang tersedia untuk diunduh.", "warning");
+        return;
+    }
+
+    const exportRows = _allSkisData.map(item => {
+        let b = parseFloat(item.bobot) || 0;
+        let bobotVal = (b <= 1 && b > 0) ? Math.round(b * 100 * 100) / 100 : Math.round(b * 100) / 100;
+
+        return {
+            "Target Unit": item.targetUnit || '',
+            "Target Level": item.targetLevel || '',
+            "Target Jabatan": item.targetJabatan || '',
+            "KPI Departemen": item.kpiDepartemen || '',
+            "SKI": item.ski || '',
+            "Target Detail": item.targetDetail || '',
+            "Kriteria 1": item.kriteria1 || '',
+            "Kriteria 2": item.kriteria2 || '',
+            "Kriteria 3": item.kriteria3 || '',
+            "Kriteria 4": item.kriteria4 || '',
+            "Kriteria 5": item.kriteria5 || '',
+            "Bobot (%)": bobotVal
+        };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+
+    worksheet['!cols'] = [
+        { wch: 18 }, // Target Unit
+        { wch: 15 }, // Target Level
+        { wch: 22 }, // Target Jabatan
+        { wch: 25 }, // KPI Departemen
+        { wch: 35 }, // SKI
+        { wch: 45 }, // Target Detail
+        { wch: 35 }, // Kriteria 1
+        { wch: 35 }, // Kriteria 2
+        { wch: 35 }, // Kriteria 3
+        { wch: 35 }, // Kriteria 4
+        { wch: 35 }, // Kriteria 5
+        { wch: 12 }  // Bobot (%)
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "SEMUA_SKI");
+
+    const activeTA = _currentTahunAjaran ? String(_currentTahunAjaran).replace(/[^a-zA-Z0-9_-]/g, '_') : 'ALL';
+    const filename = `MASTER_SEMUA_SKI_ALSKY_${activeTA}.xlsx`;
+
+    XLSX.writeFile(workbook, filename);
+    showToast(`Berhasil mengunduh seluruh data Master SKI (${_allSkisData.length} item sasaran kerja) dalam 1 file Excel!`, "success");
 };
 
 window.viewGroupSki = (encodedKey) => {
