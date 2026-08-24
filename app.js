@@ -283,6 +283,9 @@ async function fetchSupabaseAPI(action, payload = {}) {
 
         if (action === 'saveSKI') {
             const ski = payload.skiData || {};
+            if (currentUser && currentUser.level === 'Manager' && (ski.targetLevel || '').toLowerCase().trim() === 'manager') {
+                return { success: false, message: 'Manager tidak dapat membuat/mengubah SKI untuk level Manager.' };
+            }
             const row = {
                 created_by_nip: ski.createdByNIP || '',
                 target_unit: ski.targetUnit || '',
@@ -311,6 +314,9 @@ async function fetchSupabaseAPI(action, payload = {}) {
         if (action === 'saveBatchSKI') {
             const list = payload.skiList || [];
             if (list.length === 0) return { success: true };
+            if (currentUser && currentUser.level === 'Manager' && list.some(s => (s.targetLevel || '').toLowerCase().trim() === 'manager')) {
+                return { success: false, message: 'Manager tidak dapat membuat/mengubah SKI untuk level Manager.' };
+            }
 
             // Jika replaceExistingGroup tidak diset false (default true),
             // perbarui (replace) data SKI lama HANYA untuk kombinasi (Unit + Level + Jabatan) yang ada di file upload
@@ -3330,6 +3336,9 @@ async function initFormSki() {
 
             levels.sort((a, b) => levelOrder.indexOf(a) - levelOrder.indexOf(b));
             allowedLevels = levels.filter(l => !hiddenLevels.includes(l.toLowerCase().trim()));
+            if (currentUser.level === 'Manager') {
+                allowedLevels = allowedLevels.filter(l => !['manager', 'general manager', 'direktur'].includes(l.toLowerCase().trim()));
+            }
         }
 
         const currentVal = selLevel.value;
@@ -3392,6 +3401,10 @@ async function initFormSki() {
             if (!selectedLevel) {
                 resetBtn();
                 return showToast('Pilih Level Jabatan terlebih dahulu!', 'error');
+            }
+            if (currentUser.level === 'Manager' && selectedLevel.toLowerCase().trim() === 'manager') {
+                resetBtn();
+                return showToast('Manager tidak dapat membuat/mengubah SKI untuk level Manager (dirinya sendiri)!', 'error');
             }
             if (!selectedJabatan) {
                 resetBtn();
@@ -4479,6 +4492,11 @@ window.saveGroupSkiEdit = async (encodedKey) => {
     const level = parts[1];
     const jabatan = parts[2];
 
+    if (currentUser.level === 'Manager' && (level || '').toLowerCase().trim() === 'manager') {
+        resetBtn();
+        return showToast('Manager tidak dapat mengubah SKI untuk level Manager (dirinya sendiri)!', 'error');
+    }
+
     const tbodyModal = document.getElementById('tbody-modal-edit-rows');
     if (!tbodyModal) {
         resetBtn();
@@ -4883,6 +4901,9 @@ window.duplicateGroupSki = async (encodedKey) => {
 
             levels.sort((a, b) => levelOrder.indexOf(a) - levelOrder.indexOf(b));
             allowedLevels = levels.filter(l => !hiddenLevels.includes(l.toLowerCase().trim()));
+            if (currentUser.level === 'Manager') {
+                allowedLevels = allowedLevels.filter(l => !['manager', 'general manager', 'direktur'].includes(l.toLowerCase().trim()));
+            }
         }
 
         dupLevel.innerHTML = '<option value="">-- Pilih Level --</option>' +
@@ -4923,6 +4944,9 @@ window.confirmDuplicateSki = async (encodedKey) => {
 
     if (!newUnit) return showToast('Pilih Target Unit Baru!', 'error');
     if (!newLevel) return showToast('Pilih Target Level Jabatan Baru!', 'error');
+    if (currentUser.level === 'Manager' && newLevel.toLowerCase().trim() === 'manager') {
+        return showToast('Manager tidak dapat menduplikat SKI ke level Manager!', 'error');
+    }
     if (!newJabatan) return showToast('Pilih Target Jabatan Baru!', 'error');
 
     // Cek apakah kombinasi baru sudah ada
@@ -5727,6 +5751,9 @@ function setupCsvSkiModalEvents() {
     if (btnProses) {
         btnProses.onclick = async () => {
             if (_pendingCsvSkisToImport.length === 0) return;
+            if (currentUser && currentUser.level === 'Manager' && _pendingCsvSkisToImport.some(s => (s.targetLevel || '').toLowerCase().trim() === 'manager')) {
+                return showToast('Manager tidak dapat mengimpor SKI untuk level Manager (dirinya sendiri)!', 'danger');
+            }
 
             btnProses.disabled = true;
             btnProses.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Mengimpor SKI ke Supabase...`;
