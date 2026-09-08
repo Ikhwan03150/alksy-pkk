@@ -18,6 +18,7 @@ const MENU_CONFIG = {
     "Direktur": [
         { id: "dashboard", icon: "fas fa-home", text: "Dasbor" },
         { id: "daftar_ski", icon: "fas fa-list", text: "SKI" },
+        { id: "verifikasi", icon: "fas fa-check-double", text: "Verifikasi PKK" },
         { id: "monitoring", icon: "fas fa-desktop", text: "Monitoring PKK" },
         { id: "ubah_password", icon: "fas fa-key", text: "Ubah Password" }
     ],
@@ -2168,29 +2169,64 @@ async function initVerifikasi() {
     }
 
     let list = [];
+    let rawList = [];
     if (APP_CONFIG.USE_MOCK) {
-        list = MOCK_DB.pkks.filter(p => p.status.includes('Menunggu'));
+        rawList = MOCK_DB.pkks.filter(p => p.status && p.status.includes('Menunggu'));
     } else {
         const res = await fetchGasAPI('getPKKs');
         if (res && res.success) {
-            // Filter data yang sesuai dengan status dan tier atasan yang login
-            list = (res.data || []).filter(p => {
-                if (!p.status || !p.status.includes('Menunggu')) return false;
-
-                // Hanya tampilkan jika login sebagai atasan yang berwenang di tahap tersebut
-                if (p.status === 'Menunggu Verifikasi 1' && p.atasanNIP1 == currentUser.nip) return true;
-                if (p.status === 'Menunggu Verifikasi 2' && p.atasanNIP2 == currentUser.nip) return true;
-
-                // Super Admin atau General Manager juga bisa melihat pengajuan jika belum terfilter
-                if (['Super Admin', 'General Manager', 'Direktur'].includes(currentUser.level)) return true;
-
-                return false;
-            });
+            rawList = res.data || [];
         } else {
             tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Gagal mengambil data verifikasi dari database.</td></tr>`;
             return;
         }
     }
+
+    // Filter data yang sesuai dengan status dan wewenang atasan yang login
+    list = rawList.filter(p => {
+        if (!p.status || !p.status.includes('Menunggu')) return false;
+
+        const uObj = (usersList || []).find(u => String(u.nip).trim() === String(p.nip).trim());
+        const atasan1 = String(p.atasanNIP1 || (uObj ? uObj.atasan1 : '')).trim();
+        const atasan2 = String(p.atasanNIP2 || (uObj ? uObj.atasan2 : '')).trim();
+        const empUnit = (p.unit || (uObj ? uObj.unit : '')).toLowerCase().trim();
+        const empLevel = (p.level || (uObj ? uObj.level : '')).toLowerCase().trim();
+
+        // 1. Cek langsung jika login sebagai atasan penilai 1 atau 2
+        if (p.status === 'Menunggu Verifikasi 1' && atasan1 == currentUser.nip) return true;
+        if (p.status === 'Menunggu Verifikasi 2' && atasan2 == currentUser.nip) return true;
+
+        // 2. Super Admin memiliki akses penuh ke seluruh verifikasi
+        if (currentUser.level === 'Super Admin') return true;
+
+        // 3. Direktur: Verifikasi PKK untuk unit QMS dan Marketing & Komunikasi pada level Manager (serta bawahan langsung)
+        if (currentUser.level === 'Direktur') {
+            const isTargetUnit = ['qms', 'marketing & komunikasi', 'marketing & communication', 'markom'].some(tu => empUnit.includes(tu));
+            const isTargetLevel = empLevel === 'manager';
+            if (isTargetUnit && isTargetLevel) return true;
+            if (atasan1 == currentUser.nip || atasan2 == currentUser.nip) return true;
+            return false;
+        }
+
+        // 4. General Manager: Verifikasi sesuai divisinya (Pendidikan: TK, SD, SMP, SMA; Operasional: FA, GA, HRD)
+        if (currentUser.level === 'General Manager') {
+            const isPendidikan = currentUser.jabatan && currentUser.jabatan.toLowerCase().includes('pendidikan');
+            const isOperasional = currentUser.jabatan && currentUser.jabatan.toLowerCase().includes('operasional');
+            if (isPendidikan && ['tk', 'sd', 'smp', 'sma'].includes(empUnit)) {
+                return (p.status === 'Menunggu Verifikasi 1' && atasan1 == currentUser.nip) ||
+                       (p.status === 'Menunggu Verifikasi 2' && atasan2 == currentUser.nip) ||
+                       empLevel === 'manager';
+            }
+            if (isOperasional && ['fa', 'ga', 'hrd'].includes(empUnit)) {
+                return (p.status === 'Menunggu Verifikasi 1' && atasan1 == currentUser.nip) ||
+                       (p.status === 'Menunggu Verifikasi 2' && atasan2 == currentUser.nip) ||
+                       empLevel === 'manager';
+            }
+            return false;
+        }
+
+        return false;
+    });
 
     if (list.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Belum ada data pengajuan yang perlu diverifikasi.</td></tr>`;
@@ -3213,9 +3249,17 @@ async function initFormSki() {
                 } else if (isOperasional) {
                     allUnits = allUnits.filter(u => ['fa', 'ga', 'hrd'].includes((u || '').toLowerCase()));
                 }
+            } else if (currentUser.level === 'Direktur') {
+                // Untuk akun Direktur, prioritaskan unit bawahan langsung yang belum ada SKI (QMS, Marketing & Komunikasi)
+                const priorityUnits = ['QMS', 'Marketing & Komunikasi'];
+                const remaining = allUnits.filter(u => !priorityUnits.some(pu => pu.toLowerCase() === u.toLowerCase()) && u.toLowerCase() !== 'direksi');
+                allUnits = [...priorityUnits.filter(pu => allUnits.some(u => u.toLowerCase() === pu.toLowerCase())), ...remaining];
             }
+
+            // Khusus Super Admin & Direktur: jangan auto-select "Direksi" atau "Pusat", default ke "-- Pilih Unit --"
+            const shouldAutoSelect = !['Super Admin', 'Direktur'].includes(currentUser.level);
             selUnit.innerHTML = '<option value="">-- Pilih Unit --</option>' +
-                allUnits.map(u => `<option value="${u}" ${u === currentUser.unit ? 'selected' : ''}>${u}</option>`).join('');
+                allUnits.map(u => `<option value="${u}" ${(shouldAutoSelect && u === currentUser.unit) ? 'selected' : ''}>${u}</option>`).join('');
         } else {
             selUnit.innerHTML = `<option value="${currentUser.unit}">${currentUser.unit}</option>`;
         }
@@ -3229,6 +3273,8 @@ async function initFormSki() {
     const levelOrder = ['Pelaksana', 'Staff', 'Tim Leader', 'Supervisor', 'Manager', 'General Manager', 'Direktur'];
     const hiddenLevels = ['super admin', 'superadmin', 'gm', 'general manager', 'direksi', 'direktur'];
 
+    const normJabatan = (str) => (str || '').toLowerCase().replace(/manajer/g, 'manager').replace(/[\s\-_]+/g, ' ').trim();
+
     const updateJabatanDropdown = () => {
         if (!selJabatan) return;
         const selectedLvl = selLevel ? selLevel.value : '';
@@ -3236,7 +3282,7 @@ async function initFormSki() {
 
         let candidateSet = new Set();
 
-        // 1. Get users matching BOTH selectedU and selectedLvl strictly from _skiUserData
+        // 1. Ambil jabatan MURNI MENGACU KE DATA KARYAWAN (_skiUserData)
         let filteredUsers = _skiUserData;
         if (selectedU) {
             filteredUsers = filteredUsers.filter(u => (u.unit || '').toLowerCase().trim() === selectedU.toLowerCase().trim());
@@ -3246,50 +3292,49 @@ async function initFormSki() {
         }
 
         filteredUsers.forEach(u => {
-            if (u.jabatan) candidateSet.add(u.jabatan.trim());
+            if (u.jabatan && u.jabatan.trim()) {
+                candidateSet.add(u.jabatan.trim());
+            }
         });
 
-        // 2. Also check _allSkisData for existing templates matching selectedU and selectedLvl strictly
+        // 2. Jika Unit dan Level dipilih, periksa juga template SKI yang pernah dibuat di unit & level tersebut
         if (selectedU && selectedLvl) {
             _allSkisData.filter(s => {
                 return (s.targetUnit || '').toLowerCase().trim() === selectedU.toLowerCase().trim()
                     && (s.targetLevel || '').toLowerCase().trim() === selectedLvl.toLowerCase().trim();
             }).forEach(s => {
-                if (s.targetJabatan) candidateSet.add(s.targetJabatan.trim());
+                if (s.targetJabatan && s.targetJabatan.trim()) candidateSet.add(s.targetJabatan.trim());
             });
-        }
-
-        // 3. Fallbacks for Manager level IF appropriate:
-        if (selectedLvl === 'Manager') {
-            const isSchoolUnit = ['tk', 'sd', 'smp', 'sma'].includes((selectedU || '').toLowerCase().trim());
-            if (isSchoolUnit) {
-                candidateSet.add(`Kepala Sekolah ${selectedU}`);
-                candidateSet.add(`Kepala Sekolah`);
-                candidateSet.add(`Kepala ${selectedU}`);
-            } else if (selectedU) {
-                candidateSet.add(`Manager ${selectedU}`);
-                candidateSet.add(`Manajer ${selectedU}`);
-            } else {
-                candidateSet.add('Manager IT');
-                candidateSet.add('Manager HRD');
-                candidateSet.add('Manager Operasional');
-                candidateSet.add('Manager Keuangan');
-                candidateSet.add('Kepala Sekolah SMA');
-                candidateSet.add('Kepala Sekolah SMP');
-                candidateSet.add('Kepala Sekolah SD');
-                candidateSet.add('Kepala Sekolah TK');
-            }
         }
 
         let candidates = [...candidateSet].filter(Boolean);
 
-        const optionsHtml = ['<option value="">-- Pilih Jabatan --</option>'];
+        if (candidates.length === 0) {
+            if (selectedU && selectedLvl) {
+                selJabatan.innerHTML = `<option value="">-- Tidak ada jabatan ${selectedLvl} di unit ${selectedU} (Data Karyawan) --</option>`;
+            } else if (selectedLvl) {
+                selJabatan.innerHTML = `<option value="">-- Tidak ada jabatan level ${selectedLvl} di data karyawan --</option>`;
+            } else {
+                selJabatan.innerHTML = '<option value="">-- Pilih Jabatan --</option>';
+            }
+            return;
+        }
+
+        const belumList = [];
+        const drafList = [];
+        const lengkapList = [];
 
         candidates.forEach(j => {
+            let unitHint = '';
+            if (!selectedU) {
+                const uObj = _skiUserData.find(u => normJabatan(u.jabatan) === normJabatan(j));
+                if (uObj && uObj.unit) unitHint = ` (${uObj.unit})`;
+            }
+
             const existingSkis = _allSkisData.filter(s => {
-                return (s.targetUnit || '').toLowerCase().trim() === (selectedU || '').toLowerCase().trim()
-                    && (s.targetLevel || '').toLowerCase().trim() === (selectedLvl || '').toLowerCase().trim()
-                    && (s.targetJabatan || '').toLowerCase().trim() === (j || '').toLowerCase().trim();
+                const matchU = selectedU ? (s.targetUnit || '').toLowerCase().trim() === selectedU.toLowerCase().trim() : true;
+                const matchL = selectedLvl ? (s.targetLevel || '').toLowerCase().trim() === selectedLvl.toLowerCase().trim() : true;
+                return matchU && matchL && normJabatan(s.targetJabatan) === normJabatan(j);
             });
 
             if (existingSkis.length > 0) {
@@ -3300,16 +3345,132 @@ async function initFormSki() {
                 const roundedBobot = Math.round(totalBobotGroup * 10) / 10;
 
                 if (roundedBobot >= 100) {
-                    optionsHtml.push(`<option value="${j}">${j} (Sudah 100% - Edit di Master SKI)</option>`);
+                    lengkapList.push({
+                        jabatan: j,
+                        html: `<option value="${j}" style="color:#15803d; font-weight:600; background:#f0fdf4;">🟢 [Sudah 100%] ${j}${unitHint} — (Lengkap)</option>`
+                    });
                 } else {
-                    optionsHtml.push(`<option value="${j}">${j} (Draf ${roundedBobot}%)</option>`);
+                    const sisa = Math.round((100 - roundedBobot) * 10) / 10;
+                    drafList.push({
+                        jabatan: j,
+                        bobot: roundedBobot,
+                        html: `<option value="${j}" style="color:#b45309; font-weight:600; background:#fffbeb;">🟡 [Draf ${roundedBobot}%] ${j}${unitHint} — (Sisa ${sisa}%)</option>`
+                    });
                 }
             } else {
-                optionsHtml.push(`<option value="${j}">${j}</option>`);
+                belumList.push({
+                    jabatan: j,
+                    html: `<option value="${j}" style="color:#1d4ed8; font-weight:700; background:#eff6ff;">✨ [Belum Diisi] ${j}${unitHint} — (Siap Input Baru)</option>`
+                });
             }
         });
 
+        let optionsHtml = ['<option value="" style="color:#64748b;">-- Pilih Jabatan --</option>'];
+
+        // 1. Kategori Belum Diisi / Siap Input (Paling atas agar memudahkan penemuan sisa jabatan)
+        if (belumList.length > 0) {
+            optionsHtml.push(`<optgroup label="✨ BELUM DIISI (Siap Dibuat Baru — ${belumList.length} Jabatan)">`);
+            belumList.forEach(item => optionsHtml.push(item.html));
+            optionsHtml.push(`</optgroup>`);
+        }
+
+        // 2. Kategori Sedang Draf
+        if (drafList.length > 0) {
+            optionsHtml.push(`<optgroup label="🟡 SEDANG DRAF (Bobot &lt; 100% — ${drafList.length} Jabatan)">`);
+            drafList.forEach(item => optionsHtml.push(item.html));
+            optionsHtml.push(`</optgroup>`);
+        }
+
+        // 3. Kategori Sudah Lengkap 100%
+        if (lengkapList.length > 0) {
+            optionsHtml.push(`<optgroup label="🟢 SUDAH 100% LENGKAP (${lengkapList.length} Jabatan — Edit di Master SKI)">`);
+            lengkapList.forEach(item => optionsHtml.push(item.html));
+            optionsHtml.push(`</optgroup>`);
+        }
+
         selJabatan.innerHTML = optionsHtml.join('');
+        updateJabatanStatusBadge();
+    };
+
+    const updateJabatanStatusBadge = () => {
+        const badgeEl = document.getElementById('ski-jabatan-status-badge');
+        if (!badgeEl) return;
+        const chosen = selJabatan ? selJabatan.value : '';
+        if (!chosen) {
+            badgeEl.style.display = 'none';
+            badgeEl.innerHTML = '';
+            return;
+        }
+
+        const selectedU = selUnit ? selUnit.value : '';
+        const selectedLvl = selLevel ? selLevel.value : '';
+
+        const existingSkis = _allSkisData.filter(s => {
+            const matchU = selectedU ? (s.targetUnit || '').toLowerCase().trim() === selectedU.toLowerCase().trim() : true;
+            const matchL = selectedLvl ? (s.targetLevel || '').toLowerCase().trim() === selectedLvl.toLowerCase().trim() : true;
+            return matchU && matchL && normJabatan(s.targetJabatan) === normJabatan(chosen);
+        });
+
+        badgeEl.style.display = 'block';
+        if (existingSkis.length > 0) {
+            const totalBobot = existingSkis.reduce((sum, item) => {
+                let b = parseFloat(item.bobot) || 0;
+                return sum + ((b <= 1 && b > 0) ? b * 100 : b);
+            }, 0);
+            const roundedBobot = Math.round(totalBobot * 10) / 10;
+            if (roundedBobot >= 100) {
+                badgeEl.innerHTML = `
+                    <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:10px; padding:10px 14px; margin-top:8px; box-shadow:0 2px 4px rgba(22,163,74,0.08);">
+                        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                            <span style="display:inline-flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.85rem;">
+                                <span style="background:#22c55e; color:white; border-radius:50%; width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; font-size:0.75rem;">✓</span>
+                                STATUS: SUDAH 100% LENGKAP
+                            </span>
+                            <span style="background:#dcfce7; color:#15803d; font-weight:700; font-size:0.75rem; padding:3px 10px; border-radius:12px; border:1px solid #86efac;">
+                                ${existingSkis.length} Sasaran Kerja Tersimpan
+                            </span>
+                        </div>
+                        <p style="margin:6px 0 0; color:#166534; font-size:0.8rem; line-height:1.4;">
+                            Template SKI untuk jabatan <strong>${chosen}</strong> sudah penuh (100%). Untuk mengubah kriteria atau bobot, silakan gunakan tombol <strong>Edit</strong> di menu <strong>Master SKI</strong>.
+                        </p>
+                    </div>`;
+            } else {
+                const sisa = Math.round((100 - roundedBobot) * 10) / 10;
+                badgeEl.innerHTML = `
+                    <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:10px; padding:10px 14px; margin-top:8px; box-shadow:0 2px 4px rgba(217,119,6,0.08);">
+                        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                            <span style="display:inline-flex; align-items:center; gap:8px; color:#b45309; font-weight:700; font-size:0.85rem;">
+                                <i class="fas fa-clock" style="color:#d97706; font-size:1rem;"></i>
+                                STATUS: SEDANG DRAF (${roundedBobot}%)
+                            </span>
+                            <span style="background:#fef3c7; color:#b45309; font-weight:700; font-size:0.75rem; padding:3px 10px; border-radius:12px; border:1px solid #fde68a;">
+                                Sisa Bobot: ${sisa}%
+                            </span>
+                        </div>
+                        <div style="margin-top:8px; height:6px; background:#fef08a; border-radius:3px; overflow:hidden;">
+                            <div style="width:${Math.min(100, roundedBobot)}%; background:#d97706; height:100%; border-radius:3px;"></div>
+                        </div>
+                        <p style="margin:6px 0 0; color:#92400e; font-size:0.8rem; line-height:1.4;">
+                            Template SKI jabatan <strong>${chosen}</strong> baru terisi sebagian (${roundedBobot}%). Anda dapat menambahkan baris SKI untuk melengkapi hingga 100%.
+                        </p>
+                    </div>`;
+            }
+        } else {
+            badgeEl.innerHTML = `
+                <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:10px; padding:10px 14px; margin-top:8px; box-shadow:0 2px 4px rgba(37,99,235,0.08);">
+                    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                        <span style="display:inline-flex; align-items:center; gap:8px; color:#1d4ed8; font-weight:700; font-size:0.85rem;">
+                            ✨ STATUS: BELUM DIISI (0%)
+                        </span>
+                        <span style="background:#dbeafe; color:#1d4ed8; font-weight:700; font-size:0.75rem; padding:3px 10px; border-radius:12px; border:1px solid #bfdbfe;">
+                            Siap Buat Template Baru
+                        </span>
+                    </div>
+                    <p style="margin:6px 0 0; color:#1e40af; font-size:0.8rem; line-height:1.4;">
+                        Belum ada template SKI untuk jabatan <strong>${chosen}</strong>. Silakan isi form di bawah hingga total bobot mencapai 100%.
+                    </p>
+                </div>`;
+        }
     };
 
     const updateLevelDropdown = () => {
@@ -3322,15 +3483,15 @@ async function initFormSki() {
             // General Manager khusus hanya menginput SKI untuk level Manager
             allowedLevels = ['Manager'];
         } else {
-            // Filter users berdasarkan unit terpilih
+            // Filter users berdasarkan unit terpilih strictly dari data karyawan
             let filteredUsers = _skiUserData;
             if (selectedU) {
-                filteredUsers = filteredUsers.filter(u => u.unit === selectedU);
+                filteredUsers = filteredUsers.filter(u => (u.unit || '').toLowerCase().trim() === selectedU.toLowerCase().trim());
             }
 
-            // Ambil level yang HANYA ADA pada unit tersebut
+            // Ambil level yang HANYA ADA pada unit tersebut di data karyawan
             let levels = [...new Set(filteredUsers.map(u => u.level).filter(Boolean))];
-            if (levels.length === 0 && selectedU) {
+            if (levels.length === 0 && !selectedU) {
                 levels = [...new Set(_skiUserData.map(u => u.level).filter(Boolean))];
             }
 
@@ -3347,7 +3508,7 @@ async function initFormSki() {
 
         if (allowedLevels.includes(currentVal)) {
             selLevel.value = currentVal;
-        } else if (currentUser.level === 'General Manager' && allowedLevels.length === 1) {
+        } else if (allowedLevels.length === 1) {
             selLevel.value = allowedLevels[0];
         } else {
             selLevel.value = '';
@@ -3365,6 +3526,27 @@ async function initFormSki() {
     if (selLevel) {
         selLevel.onchange = () => {
             updateJabatanDropdown();
+        };
+    }
+
+    if (selJabatan) {
+        selJabatan.onchange = () => {
+            const chosen = selJabatan.value;
+            if (chosen) {
+                // Jika unit belum dipilih atau berbeda, sinkronkan ke unit karyawan pemilik jabatan ini
+                const uMatch = _skiUserData.find(u => (u.jabatan || '').toLowerCase().trim() === chosen.toLowerCase().trim());
+                if (uMatch) {
+                    if (selUnit && selUnit.value !== uMatch.unit) {
+                        selUnit.value = uMatch.unit;
+                        updateLevelDropdown();
+                        if (selLevel && uMatch.level) selLevel.value = uMatch.level;
+                        selJabatan.value = chosen;
+                    } else if (selLevel && !selLevel.value && uMatch.level) {
+                        selLevel.value = uMatch.level;
+                    }
+                }
+            }
+            updateJabatanStatusBadge();
         };
     }
 
@@ -3630,8 +3812,24 @@ function updateSkiTotalBobot() {
     if (!tbody || !totalEl) return;
     const total = [...tbody.querySelectorAll('.ski-bobot-input')].reduce((sum, inp) => sum + (parseFloat(inp.value) || 0), 0);
     const rounded = Math.round(total * 10) / 10;
-    totalEl.innerText = rounded + '%';
-    totalEl.style.color = Math.round(total) === 100 ? '#16a34a' : '#ef4444';
+
+    if (Math.round(total) === 100) {
+        totalEl.innerHTML = `<span style="background:#dcfce7; color:#15803d; border:1px solid #86efac; padding:4px 14px; border-radius:20px; font-size:1.05rem; display:inline-flex; align-items:center; gap:6px; font-weight:800;">
+            <i class="fas fa-check-circle" style="color:#16a34a;"></i> 100% (Lengkap & Pas)
+        </span>`;
+    } else if (total > 0 && total < 100) {
+        const sisa = Math.round((100 - rounded) * 10) / 10;
+        totalEl.innerHTML = `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:4px 14px; border-radius:20px; font-size:1.05rem; display:inline-flex; align-items:center; gap:6px; font-weight:800;">
+            <i class="fas fa-clock" style="color:#d97706;"></i> ${rounded}% (Draf — Sisa ${sisa}%)
+        </span>`;
+    } else if (total > 100) {
+        const lebih = Math.round((rounded - 100) * 10) / 10;
+        totalEl.innerHTML = `<span style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; padding:4px 14px; border-radius:20px; font-size:1.05rem; display:inline-flex; align-items:center; gap:6px; font-weight:800;">
+            <i class="fas fa-exclamation-triangle" style="color:#dc2626;"></i> ${rounded}% (Kelebihan ${lebih}%)
+        </span>`;
+    } else {
+        totalEl.innerHTML = `<span style="color:#94a3b8; font-size:1.05rem; font-weight:700;">0% (Belum Diisi)</span>`;
+    }
 }
 
 window.deleteSKI = async (id) => {
@@ -3697,14 +3895,14 @@ async function initDaftarSki(forceRefresh = false) {
 
     setupCsvSkiModalEvents();
 
-    // Sembunyikan tombol Input SKI Baru HANYA untuk Direktur (Read-only total)
-    const isReadOnlyAll = (currentUser.level === 'Direktur');
+    // Tombol Input SKI Baru: tampilkan untuk Super Admin, Direktur, General Manager, dan Manager
+    const canInputSki = ['Super Admin', 'Direktur', 'General Manager', 'Manager'].includes(currentUser.level);
     if (btnInputBaru) {
-        if (isReadOnlyAll) {
-            btnInputBaru.style.display = 'none';
-        } else {
+        if (canInputSki) {
             btnInputBaru.style.display = 'inline-block';
             btnInputBaru.onclick = () => navigate('form_ski');
+        } else {
+            btnInputBaru.style.display = 'none';
         }
     }
 
@@ -3877,7 +4075,7 @@ async function initDaftarSki(forceRefresh = false) {
 
             let canEditGroup = true;
             if (currentUser.level === 'Direktur') {
-                canEditGroup = false;
+                canEditGroup = true;
             } else if (currentUser.level === 'General Manager') {
                 canEditGroup = (g.level === 'Manager');
             } else if (currentUser.level === 'Manager') {
@@ -4132,7 +4330,7 @@ window.editGroupSki = (encodedKey) => {
         showToast('Manager tidak dapat mengedit SKI level Manager (dibuat oleh General Manager).', 'warning');
         return viewGroupSki(encodedKey);
     }
-    if (['Direktur', 'Supervisor', 'Staff', 'Pelaksana'].includes(currentUser.level)) {
+    if (['Supervisor', 'Staff', 'Pelaksana'].includes(currentUser.level)) {
         showToast('Level ' + currentUser.level + ' tidak memiliki hak akses untuk mengedit template SKI.', 'warning');
         return viewGroupSki(encodedKey);
     }
@@ -4681,7 +4879,7 @@ window.deleteGroupSki = async (encodedKey) => {
         showToast('Manager tidak dapat menghapus SKI level Manager (dibuat oleh General Manager).', 'warning');
         return;
     }
-    if (['Direktur', 'Supervisor', 'Staff', 'Pelaksana'].includes(currentUser.level)) {
+    if (['Supervisor', 'Staff', 'Pelaksana'].includes(currentUser.level)) {
         showToast('Level ' + currentUser.level + ' tidak memiliki hak akses untuk menghapus template SKI.', 'warning');
         return;
     }
@@ -4745,7 +4943,7 @@ window.duplicateGroupSki = async (encodedKey) => {
         showToast('Manager tidak dapat menduplikat SKI level Manager (dibuat oleh General Manager).', 'warning');
         return;
     }
-    if (['Direktur', 'Supervisor', 'Staff', 'Pelaksana'].includes(currentUser.level)) {
+    if (['Supervisor', 'Staff', 'Pelaksana'].includes(currentUser.level)) {
         showToast('Level ' + currentUser.level + ' tidak memiliki hak akses untuk menduplikat template SKI.', 'warning');
         return;
     }
@@ -4842,37 +5040,24 @@ window.duplicateGroupSki = async (encodedKey) => {
         if (selectedLvl) filteredUsers = filteredUsers.filter(u => u.level === selectedLvl);
 
         let jabatans = [...new Set(filteredUsers.map(u => u.jabatan).filter(Boolean))];
-        if (jabatans.length === 0 && selectedLvl) {
-            jabatans = [...new Set((_skiUserData || []).filter(u => u.level === selectedLvl).map(u => u.jabatan).filter(Boolean))];
-        }
-
-        // Smart fallback jabatans if no specific user jabatan exists for the selected unit & level
-        if (jabatans.length === 0 && selectedLvl) {
-            if (selectedLvl === 'Manager') {
-                jabatans = selectedU ? [`Manager ${selectedU}`, `Kepala ${selectedU}`] : ['Manager IT', 'Manager HRD', 'Kepala Sekolah SD', 'Kepala Sekolah SMP', 'Kepala Sekolah SMA', 'Kepala Sekolah TK', 'Manager Operasional', 'Manager Keuangan'];
-            } else if (selectedLvl === 'Supervisor') {
-                jabatans = selectedU ? [`Supervisor ${selectedU}`, `Wakasek Kesiswaan ${selectedU}`, `Wakasek Kurikulum ${selectedU}`] : [`Supervisor ${selectedU}`];
-            } else if (selectedLvl === 'Staff') {
-                jabatans = selectedU ? [`Guru ${selectedU}`, `Staff ${selectedU}`, `Administrasi ${selectedU}`] : [`Staff ${selectedU || ''}`];
-            } else if (selectedLvl === 'Tim Leader') {
-                jabatans = selectedU ? [`Tim Leader ${selectedU}`, `Koordinator ${selectedU}`] : [`Tim Leader ${selectedU || ''}`];
-            } else {
-                jabatans = [`${selectedLvl} ${selectedU || ''}`.trim()];
-            }
-        }
 
         // Filter out jabatans that ALREADY exist in _allSkisData
+        const normJ = (str) => (str || '').toLowerCase().replace(/manajer/g, 'manager').replace(/[\s\-_]+/g, ' ').trim();
         jabatans = jabatans.filter(j => {
             const exists = _allSkisData.some(s => {
                 return (s.targetUnit || '').toLowerCase().trim() === (selectedU || '').toLowerCase().trim()
                     && (s.targetLevel || '').toLowerCase().trim() === (selectedLvl || '').toLowerCase().trim()
-                    && (s.targetJabatan || '').toLowerCase().trim() === (j || '').toLowerCase().trim();
+                    && normJ(s.targetJabatan) === normJ(j);
             });
             return !exists;
         });
 
-        if (jabatans.length === 0 && selectedLvl) {
-            dupJabatan.innerHTML = '<option value="">-- Semua Jabatan pada Level ini Sudah Ada Template --</option>';
+        if (jabatans.length === 0) {
+            if (selectedU && selectedLvl) {
+                dupJabatan.innerHTML = `<option value="">-- Tidak ada jabatan ${selectedLvl} yang belum dibuat di unit ${selectedU} --</option>`;
+            } else {
+                dupJabatan.innerHTML = '<option value="">-- Pilih Jabatan --</option>';
+            }
         } else {
             dupJabatan.innerHTML = '<option value="">-- Pilih Jabatan --</option>' +
                 jabatans.map(j => `<option value="${j}">${j}</option>`).join('');
@@ -4887,6 +5072,14 @@ window.duplicateGroupSki = async (encodedKey) => {
         if (currentUser.level === 'General Manager') {
             // General Manager khusus hanya mengelola SKI untuk level Manager
             allowedLevels = ['Manager'];
+        } else if (currentUser.level === 'Direktur') {
+            let filteredUsers = _skiUserData || [];
+            if (selectedU) filteredUsers = filteredUsers.filter(u => (u.unit || '').toLowerCase().trim() === selectedU.toLowerCase().trim());
+            let levels = [...new Set(filteredUsers.map(u => u.level).filter(Boolean))];
+            if (!levels.includes('Manager')) levels.push('Manager');
+            levels.sort((a, b) => levelOrder.indexOf(a) - levelOrder.indexOf(b));
+            allowedLevels = levels.filter(l => !['super admin', 'superadmin', 'direksi', 'direktur'].includes(l.toLowerCase().trim()));
+            if (!allowedLevels.includes('Manager')) allowedLevels.push('Manager');
         } else {
             let filteredUsers = _skiUserData || [];
             if (selectedU) filteredUsers = filteredUsers.filter(u => u.unit === selectedU);
