@@ -611,6 +611,15 @@ async function fetchSupabaseAPI(action, payload = {}) {
             return { success: true, message: "Pengumuman berhasil disimpan!" };
         }
 
+        if (action === 'deletePengumuman') {
+            const id = payload.id;
+            if (id === undefined || id === null || id === '') throw new Error("ID pengumuman tidak valid");
+            const filterId = !isNaN(parseInt(id)) ? parseInt(id) : id;
+            const { error } = await sb.from('pengumuman').delete().eq('id', filterId);
+            if (error) throw error;
+            return { success: true, message: "Pengumuman berhasil dihapus." };
+        }
+
         if (action === 'getTahunAjaran') {
             const { data, error } = await sb.from('tahun_ajaran').select('*').order('id', { ascending: true });
             if (error) throw error;
@@ -702,6 +711,10 @@ async function fetchSupabaseAPI(action, payload = {}) {
 
 async function fetchGasAPI(action, payload = {}) {
     if (APP_CONFIG.USE_MOCK) {
+        if (action === 'deletePengumuman') {
+            MOCK_DB.pengumuman = (MOCK_DB.pengumuman || []).filter(p => String(p.id) !== String(payload.id));
+            return { success: true, message: "Pengumuman berhasil dihapus." };
+        }
         return new Promise(resolve => setTimeout(() => resolve({ success: true }), 300));
     }
     return fetchSupabaseAPI(action, payload);
@@ -992,6 +1005,73 @@ function showToast(message, type = 'success') {
         setTimeout(() => toast.remove(), 300);
     }, 3000);
 }
+
+window.showCustomConfirm = (message, title = 'Konfirmasi Hapus', actionText = 'Ya, Hapus') => {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('modal-confirm-delete');
+        if (!modal) {
+            resolve(confirm(message.replace(/<[^>]*>?/gm, '')));
+            return;
+        }
+
+        const txt = document.getElementById('modal-confirm-text');
+        const titleEl = document.getElementById('modal-confirm-title') || modal.querySelector('h3');
+        const btnCancel = document.getElementById('btn-modal-cancel');
+        const btnCloseX = document.getElementById('btn-modal-close-x');
+        const btnAction = document.getElementById('btn-modal-action');
+
+        if (txt) txt.innerHTML = message;
+        if (titleEl) titleEl.innerText = title;
+        if (btnAction) {
+            btnAction.innerHTML = `<i class="fas fa-trash-alt"></i> <span>${actionText}</span>`;
+        }
+
+        modal.style.display = 'flex';
+        requestAnimationFrame(() => {
+            modal.classList.add('show');
+        });
+
+        let isResolved = false;
+
+        const cleanupAndResolve = (val) => {
+            if (isResolved) return;
+            isResolved = true;
+
+            modal.classList.remove('show');
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 220);
+
+            document.removeEventListener('keydown', handleKeydown);
+            modal.removeEventListener('click', handleBackdropClick);
+            if (btnCancel) btnCancel.onclick = null;
+            if (btnCloseX) btnCloseX.onclick = null;
+            if (btnAction) btnAction.onclick = null;
+
+            resolve(val);
+        };
+
+        const handleKeydown = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                cleanupAndResolve(false);
+            }
+        };
+
+        const handleBackdropClick = (e) => {
+            if (e.target === modal) {
+                cleanupAndResolve(false);
+            }
+        };
+
+        if (btnCancel) btnCancel.onclick = () => cleanupAndResolve(false);
+        if (btnCloseX) btnCloseX.onclick = () => cleanupAndResolve(false);
+        if (btnAction) btnAction.onclick = () => cleanupAndResolve(true);
+
+        document.addEventListener('keydown', handleKeydown);
+        modal.addEventListener('click', handleBackdropClick);
+    });
+};
 
 const SHORT_MENU_TEXT = {
     "dashboard": "Dasbor",
@@ -1341,8 +1421,8 @@ async function initDashboard() {
                     </div>
                     ${currentUser.level === 'Super Admin' ? `
                     <div style="display: flex; gap: 5px; flex-shrink:0; margin-left:10px;">
-                        <button class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; background: #eab308;" onclick="editPengumuman('${p.id}', \`${p.judul.replace(/`/g, '\\`')}\`, \`${p.deskripsi.replace(/`/g, '\\`')}\`)"><i class="fas fa-edit"></i></button>
-                        <button class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; background: #ef4444;" onclick="deletePengumuman('${p.id}')"><i class="fas fa-trash"></i></button>
+                        <button type="button" class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; background: #eab308;" onclick="editPengumuman('${p.id}', \`${p.judul.replace(/`/g, '\\`')}\`, \`${p.deskripsi.replace(/`/g, '\\`')}\`)"><i class="fas fa-edit"></i></button>
+                        <button type="button" class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; background: #ef4444;" onclick="deletePengumuman('${p.id}')"><i class="fas fa-trash"></i></button>
                     </div>` : ''}
                 </div>
             `).join('');
@@ -1400,15 +1480,21 @@ window.editPengumuman = (id, judul, deskripsi) => {
 };
 
 window.deletePengumuman = async (id) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus pengumuman ini?')) return;
+    let confirmed = false;
+    if (typeof window.showCustomConfirm === 'function') {
+        confirmed = await window.showCustomConfirm('Apakah Anda yakin ingin menghapus pengumuman ini?');
+    } else {
+        confirmed = confirm('Apakah Anda yakin ingin menghapus pengumuman ini?');
+    }
+    if (!confirmed) return;
 
     showToast('Menghapus pengumuman...', 'info');
     const res = await fetchGasAPI('deletePengumuman', { id });
     if (res && res.success) {
-        showToast(res.message, 'success');
+        showToast(res.message || 'Pengumuman berhasil dihapus.', 'success');
         initDashboard(); // refresh dashboard
     } else {
-        showToast('Gagal menghapus pengumuman', 'error');
+        showToast((res && res.message) ? res.message : 'Gagal menghapus pengumuman', 'error');
     }
 };
 
@@ -3833,7 +3919,10 @@ function updateSkiTotalBobot() {
 }
 
 window.deleteSKI = async (id) => {
-    if (!confirm('Hapus SKI ini?')) return;
+    const confirmed = typeof window.showCustomConfirm === 'function'
+        ? await window.showCustomConfirm('Apakah Anda yakin ingin menghapus SKI ini?')
+        : confirm('Hapus SKI ini?');
+    if (!confirmed) return;
     showToast('Menghapus...', 'info');
     const res = await fetchGasAPI('deleteSKI', { id });
     if (res && res.success) {
@@ -4823,43 +4912,6 @@ window.saveGroupSkiEdit = async (encodedKey) => {
     initDaftarSki(true);
 };
 
-window.showCustomConfirm = (message, title = 'Konfirmasi Hapus', actionText = 'Ya, Hapus') => {
-    return new Promise((resolve) => {
-        const modal = document.getElementById('modal-confirm-delete');
-        const txt = document.getElementById('modal-confirm-text');
-        const btnCancel = document.getElementById('btn-modal-cancel');
-        const btnAction = document.getElementById('btn-modal-action');
-        if (!modal) {
-            resolve(confirm(message.replace(/<[^>]*>?/gm, '')));
-            return;
-        }
-
-        if (txt) txt.innerHTML = message;
-        const titleEl = modal.querySelector('h3');
-        if (titleEl) titleEl.innerText = title;
-        if (btnAction) btnAction.innerHTML = `<i class="fas fa-trash-alt" style="margin-right:6px;"></i> ${actionText}`;
-
-        modal.style.display = 'flex';
-
-        const handleCancel = () => {
-            modal.style.display = 'none';
-            if (btnCancel) btnCancel.onclick = null;
-            if (btnAction) btnAction.onclick = null;
-            resolve(false);
-        };
-
-        const handleAction = () => {
-            modal.style.display = 'none';
-            if (btnCancel) btnCancel.onclick = null;
-            if (btnAction) btnAction.onclick = null;
-            resolve(true);
-        };
-
-        if (btnCancel) btnCancel.onclick = handleCancel;
-        if (btnAction) btnAction.onclick = handleAction;
-    });
-};
-
 window.deleteGroupSki = async (encodedKey) => {
     const key = decodeURIComponent(encodedKey);
     const items = _allSkisData.filter(item => {
@@ -5504,7 +5556,10 @@ async function deleteUserByNip(nip) {
         return;
     }
 
-    if (!confirm(`Apakah Anda yakin ingin menghapus user NIP ${nip}?`)) return;
+    const confirmed = typeof window.showCustomConfirm === 'function'
+        ? await window.showCustomConfirm(`Apakah Anda yakin ingin menghapus user dengan NIP <strong>${nip}</strong> (${user ? user.nama : ''})?`)
+        : confirm(`Apakah Anda yakin ingin menghapus user NIP ${nip}?`);
+    if (!confirmed) return;
 
     const res = await fetchSupabaseAPI('deleteUser', { nip });
     if (res && res.success) {

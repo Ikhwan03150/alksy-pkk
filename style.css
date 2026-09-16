@@ -1190,3 +1190,182 @@ select.form-control { appearance: auto; }
         min-width: 100%;
     }
 }
+
+/* ===================================================
+   Custom Confirmation Popup (Centered & Modern Design)
+   =================================================== */
+.custom-confirm-backdrop {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 99999;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    opacity: 0;
+    transition: opacity 0.22s ease;
+}
+
+.custom-confirm-backdrop.show {
+    opacity: 1;
+}
+
+.custom-confirm-card {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 32px 28px 26px 28px;
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.3), 0 0 0 1px rgba(226, 232, 240, 0.9);
+    text-align: center;
+    transform: scale(0.92) translateY(12px);
+    transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.custom-confirm-backdrop.show .custom-confirm-card {
+    transform: scale(1) translateY(0);
+}
+
+.custom-confirm-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #f1f5f9;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.custom-confirm-close:hover {
+    background: #fee2e2;
+    color: #ef4444;
+    transform: rotate(90deg);
+}
+
+.custom-confirm-icon-wrap {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 16px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.custom-confirm-icon-pulse {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: rgba(239, 68, 68, 0.15);
+    animation: confirmPulse 2s infinite ease-out;
+}
+
+@keyframes confirmPulse {
+    0% { transform: scale(0.92); opacity: 0.8; }
+    50% { transform: scale(1.18); opacity: 0.25; }
+    100% { transform: scale(0.92); opacity: 0.8; }
+}
+
+.custom-confirm-icon-badge {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    color: #ef4444;
+    font-size: 1.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #fecaca;
+    box-shadow: 0 8px 16px -4px rgba(239, 68, 68, 0.2);
+}
+
+.custom-confirm-title {
+    margin: 0 0 8px 0;
+    color: #0f172a;
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.custom-confirm-message {
+    color: #64748b;
+    font-size: 0.94rem;
+    line-height: 1.55;
+    margin: 0 0 24px 0;
+    padding: 0 4px;
+    word-break: break-word;
+}
+
+.custom-confirm-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.custom-confirm-btn-cancel {
+    flex: 1;
+    padding: 11px 18px;
+    background: #f1f5f9;
+    color: #475569;
+    border-radius: 12px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    border: 1px solid #e2e8f0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.custom-confirm-btn-cancel:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+}
+
+.custom-confirm-btn-danger {
+    flex: 1;
+    padding: 11px 18px;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: #ffffff;
+    border-radius: 12px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.custom-confirm-btn-danger:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(239, 68, 68, 0.45);
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+}
+
+.custom-confirm-btn-danger:active,
+.custom-confirm-btn-cancel:active {
+    transform: scale(0.98);
+}
