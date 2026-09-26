@@ -119,6 +119,28 @@ button {
 }
 .btn-accent:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(247,118,4,0.4); }
 
+.btn-danger {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+    padding: 10px 20px;
+    box-shadow: 0 4px 12px rgba(239,68,68,0.3);
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+.btn-danger:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(239,68,68,0.4);
+    background: linear-gradient(135deg, #f87171, #ef4444);
+}
+
 .btn-icon {
     background: transparent;
     color: var(--text-muted);
@@ -1368,4 +1390,25 @@ select.form-control { appearance: auto; }
 .custom-confirm-btn-danger:active,
 .custom-confirm-btn-cancel:active {
     transform: scale(0.98);
+}
+
+/* ===================================================
+   Form PKK Locked / Submitted State Styling
+   =================================================== */
+.form-pkk-locked .input-nilai-kpi:disabled,
+.form-pkk-locked .input-nilai-perilaku:disabled,
+.form-pkk-locked .input-nilai-manajerial:disabled,
+.form-pkk-locked .form-control:disabled,
+.form-pkk-locked select:disabled,
+.form-pkk-locked textarea:disabled {
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+    font-weight: 700 !important;
+    cursor: not-allowed !important;
+    opacity: 0.95 !important;
+}
+
+.form-pkk-locked input[type="number"]:disabled {
+    text-align: center;
 }

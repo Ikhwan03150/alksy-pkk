@@ -504,6 +504,25 @@ async function fetchSupabaseAPI(action, payload = {}) {
             return { success: true, id: savedId, message: `Evaluasi Mandiri berhasil disimpan dengan status ${pkk.status || 'Draft'}.` };
         }
 
+        if (action === 'deletePKK') {
+            const { id, nip, tahunAjaran } = payload;
+            let delQuery = sb.from('pkks').delete();
+            if (id && !String(id).startsWith('PKK_')) {
+                const filterId = isNaN(parseInt(id)) ? id : parseInt(id);
+                delQuery = delQuery.eq('id', filterId);
+            } else if (nip) {
+                delQuery = delQuery.eq('nip', nip);
+                if (tahunAjaran) {
+                    delQuery = delQuery.eq('tahun_ajaran', tahunAjaran);
+                }
+            } else {
+                return { success: false, message: "ID atau NIP diperlukan untuk menghapus data PKK." };
+            }
+            const { error } = await delQuery;
+            if (error) throw error;
+            return { success: true, message: "Data PKK berhasil dihapus." };
+        }
+
         if (action === 'getBobot') {
             const local = getLocalCache('pkk_bobot_matrix_cache');
             if (local && Array.isArray(local) && local.length > 0) {
@@ -714,6 +733,17 @@ async function fetchGasAPI(action, payload = {}) {
         if (action === 'deletePengumuman') {
             MOCK_DB.pengumuman = (MOCK_DB.pengumuman || []).filter(p => String(p.id) !== String(payload.id));
             return { success: true, message: "Pengumuman berhasil dihapus." };
+        }
+        if (action === 'deletePKK') {
+            const { id, nip, tahunAjaran } = payload;
+            MOCK_DB.pkks = (MOCK_DB.pkks || []).filter(p => {
+                if (id && String(p.id) === String(id)) return false;
+                if (nip && String(p.nip) === String(nip)) {
+                    if (!tahunAjaran || String(p.tahunAjaran) === String(tahunAjaran)) return false;
+                }
+                return true;
+            });
+            return { success: true, message: "Data PKK berhasil dihapus." };
         }
         return new Promise(resolve => setTimeout(() => resolve({ success: true }), 300));
     }
@@ -1948,20 +1978,14 @@ async function initEvaluasiMandiri() {
     } else {
         document.getElementById('section-rekomendasi').style.display = 'none';
         if (existingPkk && existingPkk.status !== 'Draft') {
-            disableFormPkk();
-            if (btnDraft) btnDraft.style.display = 'none';
-            if (btnSubmit) btnSubmit.style.display = 'none';
+            renderPkkSubmittedState(existingPkk.status, existingPkk);
         } else {
-            if (btnDraft) btnDraft.style.display = 'inline-block';
-            if (btnSubmit) {
-                btnSubmit.style.display = 'inline-block';
-                btnSubmit.innerHTML = 'Ajukan Penilaian <i class="fas fa-paper-plane"></i>';
-            }
+            renderPkkDraftState(existingPkk);
         }
     }
 
     if (btnSubmit) {
-        btnSubmit.onclick = (e) => {
+        btnSubmit.onclick = async (e) => {
             e.preventDefault();
             
             if (isReviewMode) {
@@ -1978,6 +2002,25 @@ async function initEvaluasiMandiri() {
             } else {
                 const hasAtasan1 = checkHasAtasan1(currentUser);
                 const initStatus = hasAtasan1 ? 'Menunggu Verifikasi 1' : 'Selesai';
+
+                calculatePkk();
+                const currentScore = document.getElementById('final-score-display')?.innerText || '0';
+                const currentGrade = document.getElementById('final-grade-display')?.innerText || '-';
+
+                const confirmed = typeof window.showCustomConfirm === 'function'
+                    ? await window.showCustomConfirm(
+                        `Apakah Anda yakin ingin mengajukan formulir Evaluasi Mandiri ini?<br><br>
+                        <div style="text-align:left; font-size:0.86rem; color:#334155; background:#f8fafc; padding:12px; border-radius:10px; border:1px solid #e2e8f0; line-height:1.6;">
+                            <div>&bull; Skor Poin Akhir: <strong style="color:#036F3E;">${currentScore} (${currentGrade})</strong></div>
+                            <div>&bull; Setelah diajukan, data akan <strong>dikunci</strong> dan diteruskan ke Atasan untuk verifikasi.</div>
+                        </div>`,
+                        'Konfirmasi Pengajuan Evaluasi Mandiri',
+                        'Ya, Ajukan Penilaian'
+                    )
+                    : confirm('Apakah Anda yakin ingin mengajukan formulir Evaluasi Mandiri ini?');
+
+                if (!confirmed) return;
+
                 submitPkk(initStatus);
             }
         };
@@ -2200,12 +2243,24 @@ async function submitPkk(status) {
     };
 
     if (APP_CONFIG.USE_MOCK) {
-        document.getElementById('form-pkk-status').innerText = status;
-        document.getElementById('form-pkk-status').className = 'status-badge ' + (status === 'Draft' ? 'status-draft' : 'status-pending');
-        showToast(`Formulir berhasil disimpan dengan status: ${status}`, 'success');
+        const existingIdx = MOCK_DB.pkks.findIndex(p => p.nip === targetUser.nip);
+        if (existingIdx !== -1) {
+            MOCK_DB.pkks[existingIdx] = { ...MOCK_DB.pkks[existingIdx], ...pkkData };
+        } else {
+            MOCK_DB.pkks.push({ ...pkkData, id: MOCK_DB.pkks.length + 1 });
+        }
+
         if (btnSubmit) btnSubmit.disabled = false;
         if (btnDraft) btnDraft.disabled = false;
         if (btnSubmit) btnSubmit.innerHTML = oldText;
+
+        if (status !== 'Draft') {
+            renderPkkSubmittedState(status, pkkData);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            showSubmissionSuccessModal(status, pkkData);
+        } else {
+            showToast('Draft evaluasi mandiri berhasil disimpan.', 'success');
+        }
         return;
     }
 
@@ -2217,17 +2272,25 @@ async function submitPkk(status) {
 
     if (res && res.success) {
         if (res.id) window.currentActivePkkId = res.id;
-        document.getElementById('form-pkk-status').innerText = status;
-        document.getElementById('form-pkk-status').className = 'status-badge ' + (status === 'Draft' ? 'status-draft' : 'status-pending');
-        showToast(res.message || `Formulir berhasil diajukan dengan status: ${status}`, 'success');
-        if (status !== 'Draft') {
-            disableFormPkk();
-        }
+        
+        _isPkksCacheLoaded = false;
+        _allPkksCache = [];
+        clearLocalCache('pkk_pkks_cache');
+
         if (isReviewMode) {
+            showToast(res.message || `Verifikasi PKK berhasil disimpan dengan status: ${status}`, 'success');
             window.reviewTargetPkk = null;
             setTimeout(() => {
                 navigate('verifikasi');
             }, 800);
+        } else {
+            if (status !== 'Draft') {
+                renderPkkSubmittedState(status, pkkData);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                showSubmissionSuccessModal(status, pkkData);
+            } else {
+                showToast(res.message || 'Draft evaluasi mandiri berhasil disimpan.', 'success');
+            }
         }
     } else {
         showToast(res ? res.message : 'Gagal menyimpan evaluasi mandiri.', 'error');
@@ -2237,10 +2300,234 @@ async function submitPkk(status) {
 function disableFormPkk() {
     const form = document.getElementById('form-pkk');
     if (form) {
+        form.classList.add('form-pkk-locked');
         const inputs = form.querySelectorAll('input, button, select, textarea');
         inputs.forEach(el => el.disabled = true);
     }
 }
+
+function enableFormPkk() {
+    const form = document.getElementById('form-pkk');
+    if (form) {
+        form.classList.remove('form-pkk-locked');
+        const inputs = form.querySelectorAll('input, button, select, textarea');
+        inputs.forEach(el => el.disabled = false);
+    }
+}
+
+function renderPkkDraftState(existingPkk) {
+    enableFormPkk();
+    
+    const banner = document.getElementById('pkk-submission-banner');
+    if (banner) {
+        banner.style.display = 'none';
+        banner.innerHTML = '';
+    }
+
+    const actionsNormal = document.getElementById('pkk-form-actions-normal');
+    if (actionsNormal) actionsNormal.style.display = 'flex';
+
+    const actionsSubmitted = document.getElementById('pkk-form-actions-submitted');
+    if (actionsSubmitted) {
+        actionsSubmitted.style.display = 'none';
+        actionsSubmitted.innerHTML = '';
+    }
+
+    const btnDraft = document.getElementById('btn-save-draft');
+    const btnSubmit = document.getElementById('btn-submit-pkk');
+    if (btnDraft) btnDraft.style.display = 'inline-block';
+    if (btnSubmit) {
+        btnSubmit.style.display = 'inline-block';
+        btnSubmit.innerHTML = 'Ajukan Penilaian <i class="fas fa-paper-plane"></i>';
+    }
+
+    const statusBadge = document.getElementById('form-pkk-status');
+    if (statusBadge) {
+        statusBadge.innerText = 'Draft';
+        statusBadge.className = 'status-badge status-draft';
+    }
+}
+
+function renderPkkSubmittedState(status, pkkData) {
+    disableFormPkk();
+
+    // 1. Update status badge at header
+    const statusBadge = document.getElementById('form-pkk-status');
+    if (statusBadge) {
+        let badgeCls = 'status-pending';
+        let badgeIcon = 'fa-clock';
+        if (status === 'Selesai') {
+            badgeCls = 'status-success';
+            badgeIcon = 'fa-check-circle';
+        }
+        statusBadge.innerText = status;
+        statusBadge.className = `status-badge ${badgeCls}`;
+    }
+
+    // 2. Hide normal draft / submit action bar and show locked action bar
+    const actionsNormal = document.getElementById('pkk-form-actions-normal');
+    if (actionsNormal) actionsNormal.style.display = 'none';
+
+    const actionsSubmitted = document.getElementById('pkk-form-actions-submitted');
+    if (actionsSubmitted) {
+        actionsSubmitted.style.display = 'block';
+        actionsSubmitted.innerHTML = `
+            <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 16px; padding: 24px; text-align: center; box-shadow: 0 4px 14px rgba(0,0,0,0.04);">
+                <div style="display:inline-flex; align-items:center; justify-content:center; width:48px; height:48px; border-radius:50%; background:#ecfdf5; color:#10b981; font-size:1.3rem; margin-bottom:12px; border:2px solid #a7f3d0;">
+                    <i class="fas fa-lock"></i>
+                </div>
+                <h4 style="font-weight: 700; color: #0f172a; margin: 0 0 6px 0; font-size: 1.15rem;">
+                    Formulir Evaluasi Mandiri Telah Terkirim & Terkunci
+                </h4>
+                <p style="color: #64748b; font-size: 0.9rem; margin: 0 0 20px 0; max-width: 600px; margin-left:auto; margin-right:auto; line-height:1.5;">
+                    Data penilaian mandiri Anda telah berhasil tersimpan dengan status <strong>${status}</strong>. Nilai tidak dapat diubah kembali karena sedang dalam tahap verifikasi oleh atasan.
+                </p>
+                <div style="display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
+                    <button type="button" class="btn-primary" onclick="navigate('riwayat')" style="padding: 10px 24px; font-size: 0.9rem; cursor:pointer;">
+                        <i class="fas fa-history"></i> Buka Riwayat PKK
+                    </button>
+                    <button type="button" class="btn-secondary" onclick="navigate('dashboard')" style="padding: 10px 24px; font-size: 0.9rem; cursor:pointer;">
+                        <i class="fas fa-home"></i> Kembali ke Dasbor
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // 3. Populate and show prominent Banner at top
+    const banner = document.getElementById('pkk-submission-banner');
+    if (banner) {
+        banner.style.display = 'block';
+
+        let atasanName = '-';
+        const aNip = String(currentUser?.atasan1 || currentUser?.atasanNIP1 || pkkData?.atasanNIP1 || '').trim();
+        if (aNip) {
+            const uAtasan = (_allUsersCache || []).find(u => String(u.nip).trim() === aNip);
+            atasanName = uAtasan ? `${uAtasan.nama} (${uAtasan.jabatan || 'Atasan 1'})` : `NIP: ${aNip}`;
+        }
+
+        const tgl = pkkData?.tanggal || new Date().toISOString().split('T')[0];
+        const skor = pkkData?.finalScore || document.getElementById('final-score-display')?.innerText || 0;
+        const grade = pkkData?.finalGrade || document.getElementById('final-grade-display')?.innerText || '-';
+
+        let titleText = 'Formulir Evaluasi Mandiri Berhasil Terkirim!';
+        let descText = 'Data evaluasi mandiri Anda telah sukses masuk ke sistem dan saat ini berstatus <strong>' + status + '</strong>. Formulir dikunci agar tidak ada perubahan data sepihak selama proses verifikasi.';
+        let iconCls = 'fa-check-circle';
+        let bgGrad = 'linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)';
+        let borderCol = '#86efac';
+        let iconBg = 'linear-gradient(135deg, #10b981, #059669)';
+
+        if (status === 'Menunggu Verifikasi 2') {
+            titleText = 'Telah Diverifikasi Atasan 1 & Menunggu Verifikasi Atasan 2';
+            descText = 'Formulir Anda telah lolos verifikasi dari Atasan 1 dan saat ini diteruskan ke <strong>Atasan 2</strong>.';
+            bgGrad = 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)';
+            borderCol = '#93c5fd';
+            iconBg = 'linear-gradient(135deg, #3b82f6, #1d4ed8)';
+            iconCls = 'fa-user-check';
+        } else if (status === 'Selesai') {
+            titleText = 'Penilaian Kinerja Telah Selesai (Final)';
+            descText = 'Seluruh tahapan evaluasi dan verifikasi telah selesai dinilai oleh atasan.';
+            iconCls = 'fa-award';
+        }
+
+        banner.innerHTML = `
+            <div style="background: ${bgGrad}; border: 1.5px solid ${borderCol}; border-radius: 16px; padding: 22px 24px; box-shadow: 0 4px 16px rgba(16,185,129,0.12);">
+                <div style="display: flex; align-items: flex-start; gap: 16px;">
+                    <div style="width: 52px; height: 52px; border-radius: 14px; background: ${iconBg}; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; flex-shrink: 0; box-shadow: 0 4px 12px rgba(16,185,129,0.3);">
+                        <i class="fas ${iconCls}"></i>
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                            <h4 style="margin: 0; font-size: 1.2rem; font-weight: 700; color: #065f46;">
+                                ${titleText}
+                            </h4>
+                            <span class="status-badge ${status === 'Selesai' ? 'status-success' : 'status-pending'}" style="font-size:0.84rem; padding:4px 12px; display:inline-flex; align-items:center; gap:6px;">
+                                <i class="fas ${status === 'Selesai' ? 'fa-check' : 'fa-clock'}"></i> ${status}
+                            </span>
+                        </div>
+                        <p style="margin: 8px 0 14px 0; color: #166534; font-size: 0.92rem; line-height: 1.5;">
+                            ${descText}
+                        </p>
+                        <div style="display: flex; flex-wrap: wrap; gap: 12px 24px; font-size: 0.85rem; color: #374151; background: rgba(255,255,255,0.85); padding: 12px 18px; border-radius: 12px; border: 1px solid rgba(134,239,172,0.6);">
+                            <div><span style="color:#6b7280;">Tanggal Kirim:</span> <strong>${tgl}</strong></div>
+                            <div><span style="color:#6b7280;">Skor Mandiri:</span> <strong style="color:#036F3E;">${skor} (${grade})</strong></div>
+                            ${atasanName !== '-' ? `<div><span style="color:#6b7280;">Verifikator (Atasan):</span> <strong>${atasanName}</strong></div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function showSubmissionSuccessModal(status, pkkData) {
+    const existing = document.getElementById('modal-submission-success');
+    if (existing) existing.remove();
+
+    let atasanName = '-';
+    const aNip = String(currentUser?.atasan1 || currentUser?.atasanNIP1 || pkkData?.atasanNIP1 || '').trim();
+    if (aNip) {
+        const uAtasan = (_allUsersCache || []).find(u => String(u.nip).trim() === aNip);
+        atasanName = uAtasan ? `${uAtasan.nama} (${uAtasan.jabatan || 'Atasan 1'})` : `NIP: ${aNip}`;
+    }
+
+    const skor = pkkData?.finalScore || document.getElementById('final-score-display')?.innerText || 0;
+    const grade = pkkData?.finalGrade || document.getElementById('final-grade-display')?.innerText || '-';
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-submission-success';
+    modal.className = 'custom-confirm-backdrop show';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="custom-confirm-card" style="max-width: 460px; text-align: center; border-radius: 20px; padding: 32px 28px;">
+            <div class="custom-confirm-icon-wrap" style="width: 80px; height: 80px; margin: 0 auto 16px auto;">
+                <div class="custom-confirm-icon-pulse" style="background: rgba(16, 185, 129, 0.18);"></div>
+                <div class="custom-confirm-icon-badge" style="width: 72px; height: 72px; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); color: #10b981; border: 2px solid #a7f3d0; font-size: 2rem;">
+                    <i class="fas fa-paper-plane"></i>
+                </div>
+            </div>
+            <h3 style="margin: 0 0 8px 0; font-size: 1.35rem; color: #0f172a; font-weight: 700;">
+                Evaluasi Mandiri Berhasil Diajukan!
+            </h3>
+            <p style="color: #64748b; font-size: 0.92rem; line-height: 1.5; margin: 0 0 20px 0;">
+                Alhamdulillah, formulir penilaian mandiri Anda telah sukses terkirim ke sistem dan sedang menunggu verifikasi.
+            </p>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; margin-bottom: 22px; text-align: left; font-size: 0.86rem; line-height: 1.65;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#64748b;">Nama Karyawan:</span>
+                    <strong style="color:#1e293b;">${currentUser?.nama || '-'}</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#64748b;">Skor Mandiri:</span>
+                    <strong style="color:#036F3E;">${skor} (${grade})</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#64748b;">Status Saat Ini:</span>
+                    <span class="status-badge status-pending" style="font-size:0.75rem; padding:2px 8px;"><i class="fas fa-clock"></i> ${status}</span>
+                </div>
+                ${atasanName !== '-' ? `
+                <div style="display:flex; justify-content:space-between; margin-top:4px; padding-top:4px; border-top:1px dashed #cbd5e1;">
+                    <span style="color:#64748b;">Verifikator:</span>
+                    <strong style="color:#1e293b; text-align:right;">${atasanName}</strong>
+                </div>` : ''}
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button type="button" class="btn-primary" onclick="closeSubmissionSuccessModal(); navigate('riwayat');" style="flex: 1; padding: 11px 16px; font-size: 0.9rem; cursor:pointer;">
+                    <i class="fas fa-history"></i> Riwayat PKK
+                </button>
+                <button type="button" class="btn-secondary" onclick="closeSubmissionSuccessModal();" style="padding: 11px 18px; font-size: 0.9rem; cursor:pointer;">
+                    Tetap di Sini
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+window.closeSubmissionSuccessModal = function() {
+    const modal = document.getElementById('modal-submission-success');
+    if (modal) modal.remove();
+};
 
 // --- Page: Verifikasi ---
 async function initVerifikasi() {
@@ -2409,6 +2696,7 @@ async function initRiwayat() {
 let monitoringMasterData = [];
 let currentMonitoringSortField = 'idx';
 let currentMonitoringSortAsc = true;
+let currentMonitoringActiveTa = '';
 
 async function initMonitoring() {
     const tbody = document.getElementById('tbody-monitoring');
@@ -2421,6 +2709,8 @@ async function initMonitoring() {
 
     if (APP_CONFIG.USE_MOCK) {
         pkkList = MOCK_DB.pkks;
+        activeTahun = '2025/2026';
+        currentMonitoringActiveTa = activeTahun;
     } else {
         const [usersRes, pkkRes, taRes] = await Promise.all([
             fetchGasAPI('getUsers'),
@@ -2428,7 +2718,10 @@ async function initMonitoring() {
             fetchGasAPI('getTahunAjaran')
         ]);
 
-        if (taRes && taRes.active) activeTahun = taRes.active;
+        if (taRes && taRes.active) {
+            activeTahun = taRes.active;
+            currentMonitoringActiveTa = activeTahun;
+        }
         const taLabel = document.getElementById('monitoring-ta-label');
         if (taLabel) taLabel.innerText = `TA. ${activeTahun || '-'}`;
 
@@ -2583,6 +2876,8 @@ function applyMonitoringFilter() {
         return;
     }
 
+    const canDeletePKK = currentUser && (currentUser.level === 'Super Admin' || currentUser.nip === '1001');
+
     tbody.innerHTML = filtered.map(item => `
         <tr>
             <td style="color:#94a3b8; font-size:0.85rem;">${item.idx}</td>
@@ -2595,7 +2890,13 @@ function applyMonitoringFilter() {
             <td><span class="status-badge ${item.statusCls}" style="white-space:nowrap;"><i class="${item.statusIcon}"></i> ${item.statusLabel}</span></td>
             <td style="text-align:center;">
                 ${item.hasData
-                    ? `<button class="btn-primary" style="padding:5px 12px;font-size:0.8rem;" onclick="viewPKKPreview('${item.nip}')"><i class="fas fa-eye"></i> Lihat</button>`
+                    ? `
+                    <div style="display:flex; align-items:center; justify-content:center; gap:6px;">
+                        <button class="btn-primary" style="padding:5px 12px;font-size:0.8rem;border-radius:6px;" onclick="viewPKKPreview('${item.nip}')" title="Lihat Data PKK"><i class="fas fa-eye"></i> Lihat</button>
+                        ${canDeletePKK ? `
+                        <button class="btn-danger" style="padding:5px 10px;font-size:0.8rem;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-weight:600;box-shadow:0 2px 4px rgba(239,68,68,0.2);" onclick="deletePKKFromMonitoring('${item.nip}', '${item.pkk && item.pkk.id ? item.pkk.id : ''}', '${(item.nama || '').replace(/'/g, "\\'")}')" title="Hapus Data PKK"><i class="fas fa-trash"></i> Hapus</button>
+                        ` : ''}
+                    </div>`
                     : `<span style="color:#cbd5e1; font-size:0.8rem;">-</span>`
                 }
             </td>
@@ -2611,6 +2912,48 @@ window.sortMonitoring = function(field) {
         currentMonitoringSortAsc = true;
     }
     applyMonitoringFilter();
+};
+
+async function doDeletePKK(nip, pkkId, nama) {
+    if (!currentUser || (currentUser.level !== 'Super Admin' && currentUser.nip !== '1001')) {
+        showToast("Hanya Super Admin yang berhak menghapus data PKK.", "danger");
+        return;
+    }
+
+    showToast("Sedang menghapus data PKK...", "info");
+
+    try {
+        const payload = {
+            id: pkkId || null,
+            nip: nip,
+            tahunAjaran: currentMonitoringActiveTa || ''
+        };
+        const res = await fetchGasAPI('deletePKK', payload);
+        if (res && res.success) {
+            showToast(`Data PKK untuk karyawan ${nama || nip} berhasil dihapus!`, "success");
+            _isPkksCacheLoaded = false;
+            _allPkksCache = [];
+            clearLocalCache('pkk_pkks_cache');
+            await initMonitoring();
+        } else {
+            showToast(res ? (res.message || res.error || "Gagal menghapus data PKK.") : "Gagal menghapus data PKK.", "danger");
+        }
+    } catch (err) {
+        console.error("Error deleting PKK:", err);
+        showToast("Terjadi kesalahan saat menghapus data PKK: " + (err.message || err), "danger");
+    }
+}
+
+window.deletePKKFromMonitoring = async function(nip, pkkId, nama) {
+    const employeeName = nama || nip;
+    const confirmMsg = `Apakah Anda yakin ingin menghapus data PKK untuk karyawan <strong>${employeeName}</strong> (NIP: ${nip})?<br><br><span style="font-size:0.82rem; color:#ef4444;"><i class="fas fa-exclamation-triangle"></i> Data evaluasi mandiri dan verifikasi akan dihapus permanen. Status karyawan akan kembali menjadi <strong>Belum Mengisi</strong>.</span>`;
+
+    const confirmed = typeof window.showCustomConfirm === 'function'
+        ? await window.showCustomConfirm(confirmMsg, 'Konfirmasi Hapus Data PKK', 'Ya, Hapus Data')
+        : confirm(`Apakah Anda yakin ingin menghapus data PKK untuk karyawan ${employeeName} (NIP: ${nip})?`);
+    if (!confirmed) return;
+
+    await doDeletePKK(nip, pkkId, employeeName);
 };
 
 function exportMonitoringToExcel() {
@@ -3017,10 +3360,15 @@ async function viewPKKPreview(nip) {
         </div>
 
         <!-- Print Action Buttons -->
-        <div style="text-align:center; margin-top:24px; display:flex; justify-content:center; gap:12px;" class="no-print">
+        <div style="text-align:center; margin-top:24px; display:flex; justify-content:center; gap:12px; flex-wrap:wrap;" class="no-print">
             <button onclick="window.print()" style="background:#036F3E; color:white; border:none; border-radius:8px; padding:10px 28px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); transition:all 0.2s;">
                 <i class="fas fa-print"></i> Cetak / Save PDF
             </button>
+            ${(currentUser && (currentUser.level === 'Super Admin' || currentUser.nip === '1001')) ? `
+            <button onclick="deletePKKFromPreview('${nip}', '${pkk.id || ''}', '${(userInfo.nama || pkk.nama || '').replace(/'/g, "\\'")}')" style="background:#ef4444; color:white; border:none; border-radius:8px; padding:10px 24px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(239,68,68,0.2); transition:all 0.2s;">
+                <i class="fas fa-trash"></i> Hapus PKK
+            </button>
+            ` : ''}
             <button onclick="closePreviewPKK()" style="background:#64748b; color:white; border:none; border-radius:8px; padding:10px 24px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
                 <i class="fas fa-times"></i> Tutup
             </button>
@@ -3029,6 +3377,10 @@ async function viewPKKPreview(nip) {
 }
 
 window.viewPKKPreview = viewPKKPreview;
+window.deletePKKFromPreview = async function(nip, pkkId, nama) {
+    closePreviewPKK();
+    await window.deletePKKFromMonitoring(nip, pkkId, nama);
+};
 window.closePreviewPKK = function() {
     const modal = document.getElementById('modal-pkk-preview');
     if (modal) modal.style.display = 'none';
