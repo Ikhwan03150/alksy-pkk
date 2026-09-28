@@ -654,11 +654,28 @@ select.form-control { appearance: auto; }
 }
 .toast.success { border-left-color: var(--secondary); }
 .toast.error   { border-left-color: var(--danger); }
+.toast.warning { border-left-color: #F59E0B; }
 .toast.info    { border-left-color: #3B82F6; }
 .toast i { font-size: 1.1rem; }
 .toast.success i { color: var(--secondary); }
 .toast.error i   { color: var(--danger); }
+.toast.warning i { color: #F59E0B; }
 .toast.info i    { color: #3B82F6; }
+
+/* ── PKK Validation & Incomplete State ──────────────── */
+.input-pkk-incomplete {
+    border-color: #ef4444 !important;
+    background-color: #fff1f2 !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.22) !important;
+    animation: pkkShakeIncomplete 0.4s ease-in-out !important;
+}
+
+@keyframes pkkShakeIncomplete {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-4px); }
+    40%, 80% { transform: translateX(4px); }
+}
+
 
 /* ── Monitoring Filter Bar ──────────────── */
 .monitoring-filter-bar .form-control { background: white; }

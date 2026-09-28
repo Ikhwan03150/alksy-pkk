@@ -1025,7 +1025,8 @@ function updateProfileModalInfo() {
 function showToast(message, type = 'success') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i> <span>${message}</span>`;
+    const iconName = type === 'success' ? 'check-circle' : (type === 'warning' ? 'exclamation-triangle' : (type === 'info' ? 'info-circle' : 'exclamation-circle'));
+    toast.innerHTML = `<i class="fas fa-${iconName}"></i> <span>${message}</span>`;
 
     elToastContainer.appendChild(toast);
 
@@ -1033,7 +1034,7 @@ function showToast(message, type = 'success') {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(100%)';
         setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, 3200);
 }
 
 window.showCustomConfirm = (message, title = 'Konfirmasi Hapus', actionText = 'Ya, Hapus') => {
@@ -1842,37 +1843,29 @@ async function initEvaluasiMandiri() {
 
     // Attach Event Listeners for Calculation & Scale Validation
     const attachListeners = () => {
+        const handleValInput = function(input, minVal, maxVal) {
+            let v = parseFloat(input.value);
+            if (!isNaN(v)) {
+                if (v > maxVal) input.value = maxVal;
+                else if (v < minVal && input.value !== '') input.value = minVal;
+            }
+            if (input.value !== '' && !isNaN(parseFloat(input.value))) {
+                input.classList.remove('input-pkk-incomplete');
+            }
+            calculatePkk();
+            updatePkkProgressUI();
+        };
+
         document.querySelectorAll('.input-nilai-kpi').forEach(input => {
-            input.oninput = function() {
-                let v = parseFloat(this.value);
-                if (!isNaN(v)) {
-                    if (v > 5) this.value = 5;
-                    else if (v < 1 && this.value !== '') this.value = 1;
-                }
-                calculatePkk();
-            };
+            input.oninput = function() { handleValInput(this, 1, 5); };
         });
 
         document.querySelectorAll('.input-nilai-perilaku').forEach(input => {
-            input.oninput = function() {
-                let v = parseFloat(this.value);
-                if (!isNaN(v)) {
-                    if (v > 4) this.value = 4;
-                    else if (v < 1 && this.value !== '') this.value = 1;
-                }
-                calculatePkk();
-            };
+            input.oninput = function() { handleValInput(this, 1, 4); };
         });
 
         document.querySelectorAll('.input-nilai-manajerial').forEach(input => {
-            input.oninput = function() {
-                let v = parseFloat(this.value);
-                if (!isNaN(v)) {
-                    if (v > 4) this.value = 4;
-                    else if (v < 1 && this.value !== '') this.value = 1;
-                }
-                calculatePkk();
-            };
+            input.oninput = function() { handleValInput(this, 1, 4); };
         });
     };
     attachListeners();
@@ -1899,7 +1892,14 @@ async function initEvaluasiMandiri() {
 
         const setVal = (id, val) => {
             const el = document.querySelector(`input[data-id="${id}"]`);
-            if (el && val !== undefined) el.value = val;
+            if (el) {
+                const num = parseFloat(val);
+                if (!isNaN(num) && num >= 1) {
+                    el.value = num;
+                } else {
+                    el.value = '';
+                }
+            }
         };
 
         setVal('p_kualitas_hasil_kerja', existingPkk.p_kualitas_hasil_kerja);
@@ -1923,13 +1923,27 @@ async function initEvaluasiMandiri() {
                 const skiArr = JSON.parse(existingPkk.skiAnswers);
                 skiArr.forEach(ans => {
                     const el = document.querySelector(`.input-nilai-kpi[data-index="${ans.index}"]`);
-                    if (el) el.value = ans.value;
+                    if (el) {
+                        const num = parseFloat(ans.value);
+                        if (!isNaN(num) && num >= 1) {
+                            el.value = num;
+                        } else {
+                            el.value = '';
+                        }
+                    }
                 });
             } catch (e) { }
         }
 
-        setTimeout(() => calculatePkk(), 300);
-
+        setTimeout(() => {
+            calculatePkk();
+            updatePkkProgressUI();
+        }, 300);
+    } else {
+        setTimeout(() => {
+            calculatePkk();
+            updatePkkProgressUI();
+        }, 300);
     }
 
     const formEl = document.getElementById('form-pkk');
@@ -1955,6 +1969,8 @@ async function initEvaluasiMandiri() {
         }
         if (btnDraft) btnDraft.style.display = 'none';
         if (btnSubmit) btnSubmit.style.display = 'none';
+        const cardComp = document.getElementById('pkk-completion-card');
+        if (cardComp) cardComp.style.display = 'none';
         disableFormPkk();
     } else if (isReviewMode) {
         document.getElementById('section-rekomendasi').style.display = 'block';
@@ -1975,6 +1991,8 @@ async function initEvaluasiMandiri() {
             btnSubmit.innerHTML = 'Verifikasi & Simpan <i class="fas fa-check"></i>';
             btnSubmit.className = 'btn-primary';
         }
+        const cardComp = document.getElementById('pkk-completion-card');
+        if (cardComp) cardComp.style.display = 'none';
     } else {
         document.getElementById('section-rekomendasi').style.display = 'none';
         if (existingPkk && existingPkk.status !== 'Draft') {
@@ -2000,6 +2018,27 @@ async function initEvaluasiMandiri() {
 
                 submitPkk(nextStatus);
             } else {
+                // VALIDASI KETAT: Karyawan tidak bisa submit/kirim penilaian jika belum mengisi semua penilaian PKK
+                const completion = checkPkkFormCompletion(currentUser ? currentUser.level : 'Staff');
+                if (!completion.isComplete) {
+                    // Tandai semua input yang belum terisi dengan highlight merah & getar
+                    completion.missingItems.forEach(item => {
+                        if (item.element) item.element.classList.add('input-pkk-incomplete');
+                    });
+
+                    // Tampilkan modal rincian indikator yang belum diisi
+                    showPkkIncompleteModal(completion);
+
+                    showToast(`Penilaian PKK belum lengkap! Masih ada ${completion.missingItems.length} indikator yang belum diisi.`, 'error');
+
+                    // Focus pada input pertama yang kosong
+                    if (completion.firstInvalidEl) {
+                        completion.firstInvalidEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        completion.firstInvalidEl.focus();
+                    }
+                    return;
+                }
+
                 const hasAtasan1 = checkHasAtasan1(currentUser);
                 const initStatus = hasAtasan1 ? 'Menunggu Verifikasi 1' : 'Selesai';
 
@@ -2012,6 +2051,7 @@ async function initEvaluasiMandiri() {
                         `Apakah Anda yakin ingin mengajukan formulir Evaluasi Mandiri ini?<br><br>
                         <div style="text-align:left; font-size:0.86rem; color:#334155; background:#f8fafc; padding:12px; border-radius:10px; border:1px solid #e2e8f0; line-height:1.6;">
                             <div>&bull; Skor Poin Akhir: <strong style="color:#036F3E;">${currentScore} (${currentGrade})</strong></div>
+                            <div>&bull; Status Kelengkapan: <strong style="color:#16a34a;">100% Lengkap (${completion.totalRequired} Indikator)</strong></div>
                             <div>&bull; Setelah diajukan, data akan <strong>dikunci</strong> dan diteruskan ke Atasan untuk verifikasi.</div>
                         </div>`,
                         'Konfirmasi Pengajuan Evaluasi Mandiri',
@@ -2051,20 +2091,322 @@ function getBobotConfig(level) {
 
 let activeCalcLevel = null; // Stores the level used for calculation (can be different from currentUser in review mode)
 
+// --- Fungsi Validasi Kelengkapan Penilaian PKK ---
+function checkPkkFormCompletion(targetLevel) {
+    const level = targetLevel || activeCalcLevel || (currentUser ? currentUser.level : 'Staff');
+    const bobot = getBobotConfig(level);
+    const hasManajerial = (bobot.manajerial || 0) > 0;
+
+    const missingItems = [];
+    let firstInvalidEl = null;
+
+    // 1. Validasi SKI / KPI
+    const kpiInputs = Array.from(document.querySelectorAll('.input-nilai-kpi'));
+    const kpiCount = kpiInputs.length;
+    let kpiFilled = 0;
+
+    if (kpiCount === 0) {
+        missingItems.push({
+            type: 'kpi_empty',
+            label: 'Template Sasaran Kerja Individu (SKI) belum tersedia untuk jabatan Anda. Harap hubungi Admin.',
+            element: null
+        });
+    } else {
+        kpiInputs.forEach((input, idx) => {
+            const raw = (input.value || '').trim();
+            const val = parseFloat(raw);
+            const row = input.closest('tr');
+            const skiTitle = row ? (row.querySelector('strong')?.innerText?.trim() || `Baris ${idx + 1}`) : `Baris ${idx + 1}`;
+
+            if (raw === '' || isNaN(val) || val < 1 || val > 5) {
+                if (!firstInvalidEl) firstInvalidEl = input;
+                missingItems.push({
+                    type: 'kpi',
+                    label: `KPI #${idx + 1}: ${skiTitle} (Skala 1-5)`,
+                    element: input
+                });
+            } else {
+                kpiFilled++;
+            }
+        });
+    }
+
+    // 2. Validasi Perilaku (9 Indikator: Skala 1 - 4)
+    const perilakuFields = [
+        { id: 'p_kualitas_hasil_kerja', label: 'Kualitas Hasil Kerja' },
+        { id: 'p_ketepatan_waktu', label: 'Ketepatan Waktu Pengerjaan' },
+        { id: 'p_keterampilan_kerja', label: 'Keterampilan Kerja' },
+        { id: 'p_kerjasama', label: 'Kerjasama' },
+        { id: 'p_disiplin', label: 'Disiplin' },
+        { id: 'p_inisiatif', label: 'Inisiatif' },
+        { id: 'p_peningkatan_tanggung_jawab', label: 'Peningkatan Tanggung Jawab' },
+        { id: 'p_ahlak_islami', label: 'Akhlak Islami' },
+        { id: 'p_adaptasi_terhadap_perubahan', label: 'Adaptasi Terhadap Perubahan' }
+    ];
+
+    let perilakuFilled = 0;
+    perilakuFields.forEach(f => {
+        const input = document.querySelector(`.input-nilai-perilaku[data-id="${f.id}"]`);
+        if (!input) return;
+        const raw = (input.value || '').trim();
+        const val = parseFloat(raw);
+        if (raw === '' || isNaN(val) || val < 1 || val > 4) {
+            if (!firstInvalidEl) firstInvalidEl = input;
+            missingItems.push({
+                type: 'perilaku',
+                label: `Perilaku: ${f.label} (Skala 1-4)`,
+                element: input
+            });
+        } else {
+            perilakuFilled++;
+        }
+    });
+
+    // 3. Validasi Manajerial (5 Indikator: Skala 1 - 4, jika bobot manajerial > 0)
+    const manajerialFields = [
+        { id: 'm_planning_organizing', label: 'Planning & Organizing' },
+        { id: 'm_controlling', label: 'Controlling' },
+        { id: 'm_analytical_thinking', label: 'Analytical Thinking' },
+        { id: 'm_decision_making', label: 'Decision Making' },
+        { id: 'm_developing_others', label: 'Developing Others' }
+    ];
+
+    let manajerialFilled = 0;
+    if (hasManajerial) {
+        manajerialFields.forEach(f => {
+            const input = document.querySelector(`.input-nilai-manajerial[data-id="${f.id}"]`);
+            if (!input) return;
+            const raw = (input.value || '').trim();
+            const val = parseFloat(raw);
+            if (raw === '' || isNaN(val) || val < 1 || val > 4) {
+                if (!firstInvalidEl) firstInvalidEl = input;
+                missingItems.push({
+                    type: 'manajerial',
+                    label: `Manajerial: ${f.label} (Skala 1-4)`,
+                    element: input
+                });
+            } else {
+                manajerialFilled++;
+            }
+        });
+    }
+
+    const totalRequired = kpiCount + 9 + (hasManajerial ? 5 : 0);
+    const totalFilled = kpiFilled + perilakuFilled + (hasManajerial ? manajerialFilled : 0);
+    const isComplete = (kpiCount > 0) && (missingItems.length === 0);
+
+    return {
+        isComplete,
+        totalRequired,
+        totalFilled,
+        kpiCount,
+        kpiFilled,
+        perilakuFilled,
+        manajerialFilled,
+        hasManajerial,
+        missingItems,
+        firstInvalidEl
+    };
+}
+
+// --- Live Progress Indicator UI ---
+function updatePkkProgressUI() {
+    const card = document.getElementById('pkk-completion-card');
+    if (!card) return;
+
+    const isTargetPkkPresent = window.reviewTargetPkk != null;
+    const isViewOnlyMode = window.isViewOnlyMode || (window.reviewTargetPkk && window.reviewTargetPkk.status === 'Selesai');
+    const formStatus = document.getElementById('form-pkk-status')?.innerText || 'Draft';
+
+    if (isTargetPkkPresent || isViewOnlyMode || formStatus !== 'Draft') {
+        card.style.display = 'none';
+        return;
+    }
+
+    const comp = checkPkkFormCompletion(currentUser ? currentUser.level : 'Staff');
+    card.style.display = 'block';
+
+    const pct = comp.totalRequired > 0 ? Math.round((comp.totalFilled / comp.totalRequired) * 100) : 0;
+
+    if (comp.isComplete) {
+        card.innerHTML = `
+            <div class="pkk-completion-banner banner-complete" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1.5px solid #86efac; border-radius: 14px; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; box-shadow: 0 4px 12px rgba(22, 163, 74, 0.08);">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <div style="width: 40px; height: 40px; border-radius: 12px; background: #16a34a; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0; box-shadow: 0 4px 10px rgba(22, 163, 74, 0.3);">
+                        <i class="fas fa-check"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight: 700; color: #14532d; font-size: 0.95rem;">Seluruh Penilaian PKK Telah Lengkap!</div>
+                        <div style="font-size: 0.82rem; color: #166534; margin-top: 2px;">
+                            Semua ${comp.totalRequired} indikator telah terisi lengkap. Anda siap mengajukan evaluasi mandiri ke atasan.
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="background: #16a34a; color: white; padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 0.82rem; display:inline-flex; align-items:center; gap:6px;">
+                        <i class="fas fa-check-double"></i> 100% Siap Diajukan
+                    </span>
+                </div>
+            </div>
+        `;
+
+        const btnSubmit = document.getElementById('btn-submit-pkk');
+        if (btnSubmit) {
+            btnSubmit.title = "Semua penilaian telah lengkap. Klik untuk mengajukan.";
+        }
+    } else {
+        card.innerHTML = `
+            <div class="pkk-completion-banner banner-incomplete" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1.5px solid #fcd34d; border-radius: 14px; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; box-shadow: 0 4px 12px rgba(217, 119, 6, 0.08);">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <div style="width: 40px; height: 40px; border-radius: 12px; background: #d97706; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0; box-shadow: 0 4px 10px rgba(217, 119, 6, 0.3);">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight: 700; color: #78350f; font-size: 0.95rem;">
+                            Penilaian Belum Lengkap (${comp.totalFilled} dari ${comp.totalRequired} Terisi)
+                        </div>
+                        <div style="font-size: 0.82rem; color: #92400e; margin-top: 2px;">
+                            Terdapat <strong>${comp.missingItems.length} indikator</strong> yang belum dinilai. Harap lengkapi semua penilaian sebelum mengajukan.
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; min-width: 170px; flex-grow: 1; max-width: 250px;">
+                    <div style="flex-grow: 1; background: #e5e7eb; border-radius: 10px; height: 9px; overflow: hidden;">
+                        <div style="background: linear-gradient(90deg, #f59e0b, #d97706); width: ${pct}%; height: 100%; border-radius: 10px; transition: width 0.35s ease;"></div>
+                    </div>
+                    <span style="font-size: 0.82rem; font-weight: 700; color: #b45309; white-space:nowrap;">${pct}%</span>
+                </div>
+            </div>
+        `;
+
+        const btnSubmit = document.getElementById('btn-submit-pkk');
+        if (btnSubmit) {
+            btnSubmit.title = `Harap isi seluruh ${comp.totalRequired} indikator sebelum mengajukan (masih ${comp.missingItems.length} kosong).`;
+        }
+    }
+}
+
+// --- Modal Alert Penilaian Belum Lengkap ---
+function showPkkIncompleteModal(completion) {
+    const existing = document.getElementById('modal-pkk-incomplete');
+    if (existing) existing.remove();
+
+    const kpiMissing = completion.missingItems.filter(m => m.type === 'kpi' || m.type === 'kpi_empty');
+    const perilakuMissing = completion.missingItems.filter(m => m.type === 'perilaku');
+    const manajerialMissing = completion.missingItems.filter(m => m.type === 'manajerial');
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-pkk-incomplete';
+    modal.className = 'custom-confirm-backdrop show';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="custom-confirm-card" style="max-width: 520px; text-align: left; border-radius: 20px; padding: 28px 24px; position: relative;">
+            <button type="button" class="custom-confirm-close" onclick="closePkkIncompleteModal()" title="Tutup" style="position: absolute; top: 18px; right: 18px;">
+                <i class="fas fa-times"></i>
+            </button>
+            <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+                <div style="width: 50px; height: 50px; border-radius: 14px; background: #fef2f2; color: #ef4444; border: 2px solid #fecaca; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 1.25rem; color: #1e293b; font-weight: 700;">
+                        Penilaian Belum Lengkap!
+                    </h3>
+                    <p style="margin: 2px 0 0 0; color: #64748b; font-size: 0.85rem;">
+                        Anda belum bisa mengajukan formulir karena masih ada penilaian yang belum diisi.
+                    </p>
+                </div>
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 18px;">
+                <div style="font-size: 0.84rem; color: #334155; margin-bottom: 10px; font-weight: 600; display:flex; justify-content:space-between; align-items:center;">
+                    <span>Daftar Indikator yang Wajib Diisi:</span>
+                    <span style="background: #fee2e2; color: #b91c1c; padding: 2px 10px; border-radius: 12px; font-size: 0.76rem; font-weight: 700;">
+                        ${completion.missingItems.length} Belum Diisi
+                    </span>
+                </div>
+                <div style="max-height: 200px; overflow-y: auto; padding-right: 6px; font-size: 0.82rem; line-height: 1.6;">
+                    ${kpiMissing.length > 0 ? `
+                        <div style="margin-bottom: 8px;">
+                            <div style="font-weight: 700; color: #1e293b; margin-bottom: 2px;"><i class="fas fa-tasks" style="color:#036F3E;"></i> Aspek Hasil Kerja (KPI):</div>
+                            <ul style="margin: 0; padding-left: 20px; color: #475569;">
+                                ${kpiMissing.map(m => `<li>${m.label}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                    ${perilakuMissing.length > 0 ? `
+                        <div style="margin-bottom: 8px;">
+                            <div style="font-weight: 700; color: #1e293b; margin-bottom: 2px;"><i class="fas fa-user-check" style="color:#0284c7;"></i> Aspek Perilaku (Skala 1-4):</div>
+                            <ul style="margin: 0; padding-left: 20px; color: #475569;">
+                                ${perilakuMissing.map(m => `<li>${m.label}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                    ${manajerialMissing.length > 0 ? `
+                        <div>
+                            <div style="font-weight: 700; color: #1e293b; margin-bottom: 2px;"><i class="fas fa-sitemap" style="color:#8b5cf6;"></i> Aspek Manajerial (Skala 1-4):</div>
+                            <ul style="margin: 0; padding-left: 20px; color: #475569;">
+                                ${manajerialMissing.map(m => `<li>${m.label}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn-secondary" onclick="closePkkIncompleteModal()" style="padding: 10px 18px; font-size: 0.88rem; cursor:pointer;">
+                    Tutup
+                </button>
+                <button type="button" class="btn-primary" onclick="focusFirstIncompletePkkInput()" style="padding: 10px 20px; font-size: 0.88rem; cursor:pointer; background:#036F3E;">
+                    <i class="fas fa-pen-nib"></i> Lengkapi Sekarang
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closePkkIncompleteModal();
+    });
+}
+
+function closePkkIncompleteModal() {
+    const modal = document.getElementById('modal-pkk-incomplete');
+    if (modal) modal.remove();
+}
+window.closePkkIncompleteModal = closePkkIncompleteModal;
+
+function focusFirstIncompletePkkInput() {
+    closePkkIncompleteModal();
+    const completion = checkPkkFormCompletion(currentUser ? currentUser.level : 'Staff');
+    if (completion && completion.firstInvalidEl) {
+        setTimeout(() => {
+            completion.firstInvalidEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            completion.firstInvalidEl.focus();
+            completion.firstInvalidEl.classList.add('input-pkk-incomplete');
+        }, 150);
+    }
+}
+window.focusFirstIncompletePkkInput = focusFirstIncompletePkkInput;
+
 function calculatePkk() {
     const level = activeCalcLevel || (currentUser ? currentUser.level : 'Staff');
     const bobot = getBobotConfig(level);
 
     // 1. Hitung A. KPI
     let totalBxNKpi = 0; // max 500
+    let hasAnyKpi = false;
     document.querySelectorAll('.input-nilai-kpi').forEach(input => {
-        let val = parseFloat(input.value) || 0;
+        const raw = input.value.trim();
+        let val = parseFloat(raw) || 0;
         if (val > 5) { val = 5; input.value = 5; }
         if (val < 0) val = 0;
         const bbt = parseFloat(input.getAttribute('data-bobot')) || 0;
         const bxn = bbt * val;
         const bxnEl = document.getElementById(`bxn-kpi-${input.getAttribute('data-index')}`);
-        if (bxnEl) bxnEl.innerText = bxn;
+        if (bxnEl) bxnEl.innerText = raw === '' ? '-' : bxn;
+        if (raw !== '') hasAnyKpi = true;
         totalBxNKpi += bxn;
     });
     const totalKpiEl = document.getElementById('total-kpi-score');
@@ -2073,59 +2415,68 @@ function calculatePkk() {
 
     // 2. Hitung B. Perilaku (9 Indikator: max 4)
     let totalPerilakuPoints = 0;
+    let hasAnyPerilaku = false;
     const inputsPerilaku = document.querySelectorAll('.input-nilai-perilaku');
     const bbtPerIndikatorPerilaku = (bobot.perilaku || 30) / 9;
     inputsPerilaku.forEach(input => {
-        let val = parseFloat(input.value) || 0;
+        const raw = input.value.trim();
+        let val = parseFloat(raw) || 0;
         if (val > 4) { val = 4; input.value = 4; }
         if (val < 0) val = 0;
+        if (raw !== '') hasAnyPerilaku = true;
         totalPerilakuPoints += (bbtPerIndikatorPerilaku * val);
     });
 
     // 3. Hitung C. Manajerial (5 Indikator, jika ada)
     let totalManajerialPoints = 0;
+    let hasAnyManajerial = false;
     if (bobot.manajerial > 0) {
         const inputsManajerial = document.querySelectorAll('.input-nilai-manajerial');
         const bbtPerIndikatorManajerial = bobot.manajerial / 5;
         inputsManajerial.forEach(input => {
-            let val = parseFloat(input.value) || 0;
+            const raw = input.value.trim();
+            let val = parseFloat(raw) || 0;
             if (val > 4) { val = 4; input.value = 4; }
             if (val < 0) val = 0;
+            if (raw !== '') hasAnyManajerial = true;
             totalManajerialPoints += (bbtPerIndikatorManajerial * val);
         });
     }
 
     // 4. Hitung Total Poin Akhir
-    const finalTotalPoints = Math.round(finalKpiPoints + totalPerilakuPoints + totalManajerialPoints);
+    const hasAnyInput = hasAnyKpi || hasAnyPerilaku || hasAnyManajerial;
+    const finalTotalPoints = hasAnyInput ? Math.round(finalKpiPoints + totalPerilakuPoints + totalManajerialPoints) : 0;
 
     // 5. Tentukan Grade
     let finalGrade = "-";
     let gradeClass = "";
-    for (let rule of APP_CONFIG.RATING_SCALE) {
-        if (finalTotalPoints >= rule.min && finalTotalPoints <= rule.max) {
-            finalGrade = rule.grade;
-            gradeClass = rule.class;
-            break;
+    if (hasAnyInput && finalTotalPoints > 0) {
+        for (let rule of APP_CONFIG.RATING_SCALE) {
+            if (finalTotalPoints >= rule.min && finalTotalPoints <= rule.max) {
+                finalGrade = rule.grade;
+                gradeClass = rule.class;
+                break;
+            }
         }
-    }
 
-    // Fallback if finalTotalPoints > 0
-    if (finalGrade === "-" && finalTotalPoints > 0) {
-        if (finalTotalPoints >= 384) {
-            finalGrade = "Baik Sekali";
-            gradeClass = "grade-A";
-        } else if (finalTotalPoints >= 312) {
-            finalGrade = "Baik";
-            gradeClass = "grade-B";
-        } else if (finalTotalPoints >= 240) {
-            finalGrade = "Cukup";
-            gradeClass = "grade-C";
-        } else if (finalTotalPoints >= 168) {
-            finalGrade = "Kurang";
-            gradeClass = "grade-C";
-        } else {
-            finalGrade = "Kurang Sekali";
-            gradeClass = "grade-D";
+        // Fallback
+        if (finalGrade === "-") {
+            if (finalTotalPoints >= 384) {
+                finalGrade = "Baik Sekali";
+                gradeClass = "grade-A";
+            } else if (finalTotalPoints >= 312) {
+                finalGrade = "Baik";
+                gradeClass = "grade-B";
+            } else if (finalTotalPoints >= 240) {
+                finalGrade = "Cukup";
+                gradeClass = "grade-C";
+            } else if (finalTotalPoints >= 168) {
+                finalGrade = "Kurang";
+                gradeClass = "grade-C";
+            } else {
+                finalGrade = "Kurang Sekali";
+                gradeClass = "grade-D";
+            }
         }
     }
 
@@ -2135,14 +2486,49 @@ function calculatePkk() {
 
     const gradeEl = document.getElementById('final-grade-display');
     if (gradeEl) {
-        gradeEl.innerText = finalGrade;
-        gradeEl.className = 'grade-badge ' + gradeClass;
+        const comp = checkPkkFormCompletion(level);
+        if (!hasAnyInput) {
+            gradeEl.innerText = "-";
+            gradeEl.className = 'grade-badge';
+        } else if (!comp.isComplete) {
+            gradeEl.innerText = `${finalGrade} (Sementara)`;
+            gradeEl.className = 'grade-badge ' + gradeClass;
+        } else {
+            gradeEl.innerText = finalGrade;
+            gradeEl.className = 'grade-badge ' + gradeClass;
+        }
     }
 }
 
 async function submitPkk(status) {
     const btnSubmit = document.getElementById('btn-submit-pkk');
     const btnDraft = document.getElementById('btn-save-draft');
+
+    // Check if we are reviewing as supervisor
+    const isReviewMode = window.reviewTargetPkk != null;
+    const targetUser = isReviewMode ? window.reviewTargetPkk : currentUser;
+
+    if (!targetUser) {
+        showToast('Terjadi kesalahan: Data target pengguna tidak ditemukan.', 'error');
+        return;
+    }
+
+    // FAIL-SAFE VALIDASI: Karyawan tidak bisa submit/kirim penilaian jika belum mengisi semua penilaian PKK
+    if (status !== 'Draft' && !isReviewMode) {
+        const completion = checkPkkFormCompletion(targetUser.level);
+        if (!completion.isComplete) {
+            showToast(`Gagal mengajukan: Masih ada ${completion.missingItems.length} indikator penilaian yang belum diisi.`, 'error');
+            completion.missingItems.forEach(item => {
+                if (item.element) item.element.classList.add('input-pkk-incomplete');
+            });
+            showPkkIncompleteModal(completion);
+            if (completion.firstInvalidEl) {
+                completion.firstInvalidEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                completion.firstInvalidEl.focus();
+            }
+            return;
+        }
+    }
 
     // Disable buttons
     if (btnSubmit) btnSubmit.disabled = true;
@@ -2155,6 +2541,8 @@ async function submitPkk(status) {
 
     const finalScore = parseFloat(document.getElementById('final-score-display')?.innerText || 0);
     let finalGrade = document.getElementById('final-grade-display')?.innerText || '-';
+    // Hapus suffix (Sementara) jika ada
+    finalGrade = finalGrade.replace(/\s*\(Sementara\)/gi, '').trim();
     if (finalGrade === '-' && finalScore > 0) {
         if (finalScore >= 384) finalGrade = "Baik Sekali";
         else if (finalScore >= 312) finalGrade = "Baik";
@@ -2189,18 +2577,6 @@ async function submitPkk(status) {
             value: input.value
         });
     });
-
-    // Check if we are reviewing as supervisor
-    const isReviewMode = window.reviewTargetPkk != null;
-    const targetUser = isReviewMode ? window.reviewTargetPkk : currentUser;
-
-    if (!targetUser) {
-        showToast('Terjadi kesalahan: Data target pengguna tidak ditemukan.', 'error');
-        if (btnSubmit) btnSubmit.innerHTML = oldText;
-        if (btnSubmit) btnSubmit.disabled = false;
-        if (btnDraft) btnDraft.disabled = false;
-        return;
-    }
 
     // Collect Aspek D (Rekomendasi)
     const rekomendasiPerbaikan = document.getElementById('input-jenis-perbaikan')?.value || '';
