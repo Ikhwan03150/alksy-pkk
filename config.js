@@ -49,11 +49,13 @@ const MOCK_DB = {
     pkks: [
         {
             id: 1, nip: "7001", nama: "Mas Staff", unit: "IT",
-            finalScore: 350, finalGrade: "Baik", status: "Selesai", tanggal: "2024-06-15"
+            finalScore: 350, finalGrade: "Baik", status: "Selesai", tanggal: "2024-06-15",
+            tglPengajuan: "2024-06-15", tglVerifikasi1: "2024-06-18", tglVerifikasi2: "2024-06-20"
         },
         {
             id: 2, nip: "6001", nama: "Bapak TL", unit: "IT",
-            finalScore: 0, finalGrade: "-", status: "Menunggu Verifikasi 1", tanggal: "2024-06-20"
+            finalScore: 0, finalGrade: "-", status: "Menunggu Verifikasi 1", tanggal: "2024-06-20",
+            tglPengajuan: "2024-06-20"
         }
     ],
     pengumuman: [

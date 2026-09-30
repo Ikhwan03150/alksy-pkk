@@ -404,6 +404,8 @@ async function fetchSupabaseAPI(action, payload = {}) {
 
             const pkks = (data || []).map(p => {
                 const evalData = (typeof p.evaluasi_data === 'string' ? JSON.parse(p.evaluasi_data) : p.evaluasi_data) || {};
+                const verif1 = (typeof p.verifikasi1_data === 'string' ? JSON.parse(p.verifikasi1_data) : p.verifikasi1_data) || {};
+                const verif2 = (typeof p.verifikasi2_data === 'string' ? JSON.parse(p.verifikasi2_data) : p.verifikasi2_data) || {};
                 return {
                     id: p.id,
                     nip: p.nip,
@@ -414,9 +416,13 @@ async function fetchSupabaseAPI(action, payload = {}) {
                     finalGrade: p.final_grade,
                     status: p.status,
                     tanggal: p.tanggal,
+                    createdAt: p.created_at,
                     evaluasiData: evalData,
-                    verifikasi1Data: p.verifikasi1_data,
-                    verifikasi2Data: p.verifikasi2_data,
+                    verifikasi1Data: verif1,
+                    verifikasi2Data: verif2,
+                    tglPengajuan: evalData.tglPengajuan || (p.status !== 'Draft' ? ((p.created_at ? p.created_at.split('T')[0] : '') || p.tanggal) : ''),
+                    tglVerifikasi1: evalData.tglVerifikasi1 || verif1.tanggal || ((p.status === 'Menunggu Verifikasi 2' || p.status === 'Selesai') ? (p.tanggal || '') : ''),
+                    tglVerifikasi2: evalData.tglVerifikasi2 || verif2.tanggal || '',
                     p_kualitas_hasil_kerja: evalData.p_kualitas_hasil_kerja,
                     p_ketepatan_waktu: evalData.p_ketepatan_waktu,
                     p_keterampilan_kerja: evalData.p_keterampilan_kerja,
@@ -446,7 +452,7 @@ async function fetchSupabaseAPI(action, payload = {}) {
         if (action === 'savePKK') {
             const pkk = payload.pkkData || {};
 
-            const evaluasiObj = (pkk.evaluasiData && Object.keys(pkk.evaluasiData).length > 0) ? pkk.evaluasiData : {
+            const evaluasiObj = (pkk.evaluasiData && Object.keys(pkk.evaluasiData).length > 0) ? { ...pkk.evaluasiData } : {
                 p_kualitas_hasil_kerja: pkk.p_kualitas_hasil_kerja,
                 p_ketepatan_waktu: pkk.p_ketepatan_waktu,
                 p_keterampilan_kerja: pkk.p_keterampilan_kerja,
@@ -470,6 +476,10 @@ async function fetchSupabaseAPI(action, payload = {}) {
                 atasanNIP2: pkk.atasanNIP2
             };
 
+            if (pkk.tglPengajuan) evaluasiObj.tglPengajuan = pkk.tglPengajuan;
+            if (pkk.tglVerifikasi1) evaluasiObj.tglVerifikasi1 = pkk.tglVerifikasi1;
+            if (pkk.tglVerifikasi2) evaluasiObj.tglVerifikasi2 = pkk.tglVerifikasi2;
+
             const row = {
                 nip: pkk.nip || '',
                 nama: pkk.nama || '',
@@ -478,10 +488,10 @@ async function fetchSupabaseAPI(action, payload = {}) {
                 final_score: pkk.finalScore || 0,
                 final_grade: pkk.finalGrade || '-',
                 status: pkk.status || 'Draft',
-                tanggal: pkk.tanggal || new Date().toISOString().split('T')[0],
+                tanggal: pkk.tglPengajuan || pkk.tanggal || new Date().toISOString().split('T')[0],
                 evaluasi_data: evaluasiObj,
-                verifikasi1_data: pkk.verifikasi1Data || {},
-                verifikasi2_data: pkk.verifikasi2Data || {}
+                verifikasi1_data: pkk.verifikasi1Data || (pkk.tglVerifikasi1 ? { tanggal: pkk.tglVerifikasi1 } : {}),
+                verifikasi2_data: pkk.verifikasi2Data || (pkk.tglVerifikasi2 ? { tanggal: pkk.tglVerifikasi2 } : {})
             };
 
             let savedId = pkk.id;
@@ -1885,6 +1895,7 @@ async function initEvaluasiMandiri() {
         }
     }
 
+    window.currentActivePkkObj = existingPkk;
     if (existingPkk) {
         window.currentActivePkkId = existingPkk.id;
         document.getElementById('form-pkk-status').innerText = existingPkk.status;
@@ -2586,6 +2597,47 @@ async function submitPkk(status) {
 
     const targetId = isReviewMode ? targetUser.id : (window.currentActivePkkId || undefined);
 
+    const prevPkk = isReviewMode ? window.reviewTargetPkk : (window.currentActivePkkObj || null);
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    let tglPengajuan = prevPkk?.tglPengajuan || prevPkk?.evaluasiData?.tglPengajuan || (prevPkk?.createdAt ? prevPkk.createdAt.split('T')[0] : '') || (prevPkk?.created_at ? prevPkk.created_at.split('T')[0] : '') || (prevPkk && prevPkk.status !== 'Draft' ? (prevPkk.tanggal || '') : '');
+    let tglVerifikasi1 = prevPkk?.tglVerifikasi1 || prevPkk?.verifikasi1Data?.tanggal || prevPkk?.evaluasiData?.tglVerifikasi1 || '';
+    let tglVerifikasi2 = prevPkk?.tglVerifikasi2 || prevPkk?.verifikasi2Data?.tanggal || prevPkk?.evaluasiData?.tglVerifikasi2 || '';
+    let verifikasi1Data = prevPkk?.verifikasi1Data || {};
+    let verifikasi2Data = prevPkk?.verifikasi2Data || {};
+
+    if (!isReviewMode) {
+        if (status !== 'Draft') {
+            tglPengajuan = todayStr;
+        }
+    } else {
+        // Penilai (Atasan) sedang verifikasi PKK
+        const prevStatus = prevPkk ? (prevPkk.status || '') : '';
+        if (prevStatus === 'Menunggu Verifikasi 1' || prevStatus.includes('Verifikasi 1') || (!tglVerifikasi1 && prevStatus !== 'Menunggu Verifikasi 2')) {
+            tglVerifikasi1 = todayStr;
+            verifikasi1Data = {
+                tanggal: todayStr,
+                verifikatorNip: currentUser?.nip || '',
+                verifikatorNama: currentUser?.nama || ''
+            };
+        } else if (prevStatus === 'Menunggu Verifikasi 2' || prevStatus.includes('Verifikasi 2')) {
+            tglVerifikasi2 = todayStr;
+            verifikasi2Data = {
+                tanggal: todayStr,
+                verifikatorNip: currentUser?.nip || '',
+                verifikatorNama: currentUser?.nama || ''
+            };
+        } else {
+            if (currentUser && targetUser && String(currentUser.nip).trim() === String(targetUser.atasanNIP2 || targetUser.atasan2).trim()) {
+                tglVerifikasi2 = todayStr;
+                verifikasi2Data = { tanggal: todayStr, verifikatorNip: currentUser.nip, verifikatorNama: currentUser.nama };
+            } else {
+                tglVerifikasi1 = todayStr;
+                verifikasi1Data = { tanggal: todayStr, verifikatorNip: currentUser?.nip || '', verifikatorNama: currentUser?.nama || '' };
+            }
+        }
+    }
+
     const pkkData = {
         id: targetId,
         nip: targetUser.nip,
@@ -2594,6 +2646,12 @@ async function submitPkk(status) {
         unit: targetUser.unit,
         atasanNIP1: targetUser.atasanNIP1 || targetUser.atasan1 || '',
         atasanNIP2: targetUser.atasanNIP2 || targetUser.atasan2 || '',
+        tanggal: tglPengajuan || todayStr,
+        tglPengajuan,
+        tglVerifikasi1,
+        tglVerifikasi2,
+        verifikasi1Data,
+        verifikasi2Data,
         p_kualitas_hasil_kerja,
         p_ketepatan_waktu,
         p_keterampilan_kerja,
@@ -3469,6 +3527,57 @@ async function viewPKKPreview(nip) {
     const atasan1Name = uAtasan1 ? uAtasan1.nama : (atasan1Nip && atasan1Nip !== '-' && atasan1Nip !== '0' && atasan1Nip.toLowerCase() !== 'null' ? atasan1Nip : '-');
     const atasan2Name = uAtasan2 ? uAtasan2.nama : (atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Nip.toLowerCase() !== 'null' ? atasan2Nip : '-');
 
+    // GMO / GMP resolution
+    const empUnit = String(userInfo.unit || pkk.unit || '').trim().toLowerCase();
+    const isPendidikan = ['tk', 'sd', 'smp', 'sma'].some(u => empUnit.includes(u));
+
+    const gmUser = (_previewUsersCache || []).find(u => {
+        const uLevel = String(u.level || '').trim().toLowerCase();
+        const uJabatan = String(u.jabatan || '').trim().toLowerCase();
+        if (uLevel === 'general manager' || uJabatan.includes('gm') || uJabatan.includes('general manager')) {
+            if (isPendidikan) {
+                return uJabatan.includes('pendidikan') || uJabatan.includes('gmp');
+            } else {
+                return uJabatan.includes('operasional') || uJabatan.includes('gmo') || !uJabatan.includes('pendidikan');
+            }
+        }
+        return false;
+    });
+
+    const gmName = gmUser ? gmUser.nama : '( &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; )';
+    const gmNip = gmUser ? gmUser.nip : '';
+
+    // Tanggal Pengesahan Otomatis
+    let tglPengajuan = pkk.tglPengajuan || (pkk.evaluasiData && pkk.evaluasiData.tglPengajuan) || (pkk.createdAt ? pkk.createdAt.split('T')[0] : '') || (pkk.created_at ? pkk.created_at.split('T')[0] : '') || (pkk.status && pkk.status !== 'Draft' ? pkk.tanggal : '');
+
+    let tglVerif1 = pkk.tglVerifikasi1 || (pkk.verifikasi1Data && pkk.verifikasi1Data.tanggal) || (pkk.evaluasiData && pkk.evaluasiData.tglVerifikasi1) || '';
+    if (!tglVerif1 && (pkk.status === 'Menunggu Verifikasi 2' || pkk.status === 'Selesai')) {
+        tglVerif1 = (pkk.tanggal && pkk.tanggal !== tglPengajuan) ? pkk.tanggal : (pkk.tanggal || new Date().toISOString().split('T')[0]);
+    }
+
+    let tglVerif2 = pkk.tglVerifikasi2 || (pkk.verifikasi2Data && pkk.verifikasi2Data.tanggal) || (pkk.evaluasiData && pkk.evaluasiData.tglVerifikasi2) || '';
+    if (!tglVerif2 && pkk.status === 'Selesai' && atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Name !== '-') {
+        tglVerif2 = pkk.tanggal || (pkk.created_at ? pkk.created_at.split('T')[0] : '');
+    }
+
+    const formatSigDate = (dateVal) => {
+        if (!dateVal || dateVal === '-' || dateVal === '0') return 'Tgl. &nbsp;&nbsp;&nbsp;&nbsp; / &nbsp;&nbsp;&nbsp;&nbsp; /';
+        const str = String(dateVal).trim();
+        if (/^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/.test(str)) {
+            return `Tgl. ${str.replace(/-/g, ' / ')}`;
+        }
+        try {
+            const d = new Date(str);
+            if (isNaN(d.getTime())) return `Tgl. ${str}`;
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            return `Tgl. ${day} / ${month} / ${year}`;
+        } catch (e) {
+            return `Tgl. ${str}`;
+        }
+    };
+
     // Get matching SKI templates
     const targetJabatan = String(userInfo.jabatan || pkk.level).trim().toLowerCase();
     const targetUnit = String(userInfo.unit || pkk.unit).trim().toLowerCase();
@@ -3676,7 +3785,7 @@ async function viewPKKPreview(nip) {
             <div style="font-size:2.4rem; font-weight:800; color:#4ade80;">${pkk.finalScore || 0}</div>
         </div>
 
-        <!-- Section G: Pengesahan (5 Tanda Tangan) -->
+        <!-- Section G: Pengesahan (4 Tanda Tangan) -->
         <div style="margin-top:28px; page-break-inside:avoid;">
             <div style="font-weight:700; color:white; font-size:0.88rem; padding:6px 12px; background:#036F3E; border-radius:4px 4px 0 0; letter-spacing:0.5px;">
                 G. PENGESAHAN DOKUMEN PENILAIAN
@@ -3684,11 +3793,10 @@ async function viewPKKPreview(nip) {
             <table style="width:100%; border-collapse:collapse; border:1.5px solid #1e293b; text-align:center; font-size:0.82rem;">
                 <thead>
                     <tr style="border-bottom:1.5px solid #1e293b; background:#f8fafc; font-weight:700; color:#1e293b;">
-                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:20%;">Yang Dinilai</th>
-                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:20%;">Penilai (Atasan 1)</th>
-                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:20%;">Atasan Penilai 2</th>
-                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:20%;">Kepala Divisi / GM</th>
-                        <th style="padding:8px 4px; width:20%;">HRD</th>
+                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:25%;">Yang mengajukan</th>
+                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:25%;">Penilai (Atasan 1)</th>
+                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:25%;">Penilai (Atasan 2)</th>
+                        <th style="padding:8px 4px; width:25%;">GMO / GMP</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -3705,18 +3813,15 @@ async function viewPKKPreview(nip) {
                             <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${atasan2Name}</div>
                             <div style="font-size:0.75rem; color:#64748b;">${atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Nip.toLowerCase() !== 'null' ? 'NIP: ' + atasan2Nip : ''}</div>
                         </td>
-                        <td style="border-right:1.5px solid #1e293b; padding-bottom:8px;">
-                            <div style="font-weight:700; color:#1e293b; text-decoration:underline;">( &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; )</div>
-                        </td>
                         <td style="padding-bottom:8px;">
-                            <div style="font-weight:700; color:#1e293b; text-decoration:underline;">( &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; )</div>
+                            <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${gmName}</div>
+                            <div style="font-size:0.75rem; color:#64748b;">${gmNip ? 'NIP: ' + gmNip : ''}</div>
                         </td>
                     </tr>
                     <tr style="border-top:1.5px solid #1e293b; font-size:0.78rem; color:#334155;">
-                        <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">Tgl. &nbsp;&nbsp;&nbsp;&nbsp; / &nbsp;&nbsp;&nbsp;&nbsp; /</td>
-                        <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">Tgl. &nbsp;&nbsp;&nbsp;&nbsp; / &nbsp;&nbsp;&nbsp;&nbsp; /</td>
-                        <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">Tgl. &nbsp;&nbsp;&nbsp;&nbsp; / &nbsp;&nbsp;&nbsp;&nbsp; /</td>
-                        <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">Tgl. &nbsp;&nbsp;&nbsp;&nbsp; / &nbsp;&nbsp;&nbsp;&nbsp; /</td>
+                        <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">${formatSigDate(tglPengajuan)}</td>
+                        <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">${formatSigDate(tglVerif1)}</td>
+                        <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">${(atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Name !== '-') ? formatSigDate(tglVerif2) : '-'}</td>
                         <td style="padding:5px 4px;">Tgl. &nbsp;&nbsp;&nbsp;&nbsp; / &nbsp;&nbsp;&nbsp;&nbsp; /</td>
                     </tr>
                 </tbody>
