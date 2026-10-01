@@ -1047,7 +1047,7 @@ function showToast(message, type = 'success') {
     }, 3200);
 }
 
-window.showCustomConfirm = (message, title = 'Konfirmasi Hapus', actionText = 'Ya, Hapus') => {
+window.showCustomConfirm = (message, title = 'Konfirmasi Hapus', actionText = 'Ya, Hapus', options = {}) => {
     return new Promise((resolve) => {
         const modal = document.getElementById('modal-confirm-delete');
         if (!modal) {
@@ -1055,16 +1055,36 @@ window.showCustomConfirm = (message, title = 'Konfirmasi Hapus', actionText = 'Y
             return;
         }
 
+        const opts = typeof options === 'string' ? { type: options } : (options || {});
+        const isSubmit = /ajukan|pengajuan|kirim|submit|simpan|verifikasi|setuju/i.test((title || '') + ' ' + (actionText || ''));
+        const type = opts.type || (isSubmit ? 'primary' : 'danger');
+        const icon = opts.icon || (type === 'primary' || type === 'success' ? 'fas fa-paper-plane' : (type === 'warning' ? 'fas fa-exclamation-triangle' : 'fas fa-trash-alt'));
+        const btnIcon = opts.btnIcon || icon;
+
         const txt = document.getElementById('modal-confirm-text');
         const titleEl = document.getElementById('modal-confirm-title') || modal.querySelector('h3');
         const btnCancel = document.getElementById('btn-modal-cancel');
         const btnCloseX = document.getElementById('btn-modal-close-x');
         const btnAction = document.getElementById('btn-modal-action');
+        const badgeEl = document.getElementById('modal-confirm-icon-badge') || modal.querySelector('.custom-confirm-icon-badge');
+        const pulseEl = document.getElementById('modal-confirm-icon-pulse') || modal.querySelector('.custom-confirm-icon-pulse');
 
         if (txt) txt.innerHTML = message;
         if (titleEl) titleEl.innerText = title;
+
+        const typeClass = (type === 'primary' || type === 'success') ? 'primary' : (type === 'warning' ? 'warning' : 'danger');
+        if (badgeEl) {
+            badgeEl.className = `custom-confirm-icon-badge ${typeClass}`;
+            badgeEl.innerHTML = `<i class="${icon}" id="modal-confirm-icon"></i>`;
+        }
+        if (pulseEl) {
+            pulseEl.className = `custom-confirm-icon-pulse ${typeClass}`;
+        }
+
         if (btnAction) {
-            btnAction.innerHTML = `<i class="fas fa-trash-alt"></i> <span>${actionText}</span>`;
+            const btnClass = opts.btnClass || (type === 'primary' || type === 'success' ? 'custom-confirm-btn-primary' : (type === 'warning' ? 'custom-confirm-btn-warning' : 'custom-confirm-btn-danger'));
+            btnAction.className = btnClass;
+            btnAction.innerHTML = `<i class="${btnIcon}"></i> <span>${actionText}</span>`;
         }
 
         modal.style.display = 'flex';
@@ -2066,7 +2086,12 @@ async function initEvaluasiMandiri() {
                             <div>&bull; Setelah diajukan, data akan <strong>dikunci</strong> dan diteruskan ke Atasan untuk verifikasi.</div>
                         </div>`,
                         'Konfirmasi Pengajuan Evaluasi Mandiri',
-                        'Ya, Ajukan Penilaian'
+                        'Ya, Ajukan Penilaian',
+                        {
+                            type: 'primary',
+                            icon: 'fas fa-paper-plane',
+                            btnIcon: 'fas fa-paper-plane'
+                        }
                     )
                     : confirm('Apakah Anda yakin ingin mengajukan formulir Evaluasi Mandiri ini?');
 
