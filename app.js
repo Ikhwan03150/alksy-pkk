@@ -11,14 +11,18 @@ const MENU_CONFIG = {
         { id: "manajemen_user", icon: "fas fa-users-cog", text: "Manajemen User" },
         { id: "daftar_ski", icon: "fas fa-list-alt", text: "Master SKI" },
         { id: "monitoring", icon: "fas fa-desktop", text: "Monitoring PKK" },
+        { id: "pengesahan", icon: "fas fa-stamp", text: "Pengesahan PKK" },
         { id: "settings", icon: "fas fa-cog", text: "Setting Bobot" },
+        { id: "setting_pengesahan", icon: "fas fa-user-check", text: "Setting Pengesahan" },
         { id: "tahun_ajaran", icon: "fas fa-calendar", text: "Tahun Ajaran" },
+        { id: "backup_data", icon: "fas fa-database", text: "Backup Data" },
         { id: "ubah_password", icon: "fas fa-key", text: "Ubah Password" }
     ],
     "Direktur": [
         { id: "dashboard", icon: "fas fa-home", text: "Dasbor" },
         { id: "daftar_ski", icon: "fas fa-list", text: "SKI" },
         { id: "verifikasi", icon: "fas fa-check-double", text: "Verifikasi PKK" },
+        { id: "pengesahan", icon: "fas fa-stamp", text: "Pengesahan PKK" },
         { id: "monitoring", icon: "fas fa-desktop", text: "Monitoring PKK" },
         { id: "ubah_password", icon: "fas fa-key", text: "Ubah Password" }
     ],
@@ -26,6 +30,7 @@ const MENU_CONFIG = {
         { id: "dashboard", icon: "fas fa-home", text: "Dasbor" },
         { id: "daftar_ski", icon: "fas fa-list", text: "SKI" },
         { id: "verifikasi", icon: "fas fa-check-double", text: "Verifikasi PKK" },
+        { id: "pengesahan", icon: "fas fa-stamp", text: "Pengesahan PKK" },
         { id: "monitoring", icon: "fas fa-desktop", text: "Monitoring PKK" },
         { id: "ubah_password", icon: "fas fa-key", text: "Ubah Password" }
     ],
@@ -423,6 +428,12 @@ async function fetchSupabaseAPI(action, payload = {}) {
                     tglPengajuan: evalData.tglPengajuan || (p.status !== 'Draft' ? ((p.created_at ? p.created_at.split('T')[0] : '') || p.tanggal) : ''),
                     tglVerifikasi1: evalData.tglVerifikasi1 || verif1.tanggal || ((p.status === 'Menunggu Verifikasi 2' || p.status === 'Selesai') ? (p.tanggal || '') : ''),
                     tglVerifikasi2: evalData.tglVerifikasi2 || verif2.tanggal || '',
+                    tglPengesahan: evalData.tglPengesahan || (evalData.pengesahanData && evalData.pengesahanData.tanggal) || '',
+                    pengesahNip: evalData.pengesahNip || (evalData.pengesahanData && evalData.pengesahanData.pengesahNip) || '',
+                    pengesahNama: evalData.pengesahNama || (evalData.pengesahanData && evalData.pengesahanData.pengesahNama) || '',
+                    pengesahJabatan: evalData.pengesahJabatan || (evalData.pengesahanData && evalData.pengesahanData.pengesahJabatan) || '',
+                    pengesahanData: evalData.pengesahanData || null,
+                    statusPengesahan: evalData.statusPengesahan || (evalData.tglPengesahan ? 'Disahkan' : 'Belum Disahkan'),
                     p_kualitas_hasil_kerja: evalData.p_kualitas_hasil_kerja,
                     p_ketepatan_waktu: evalData.p_ketepatan_waktu,
                     p_keterampilan_kerja: evalData.p_keterampilan_kerja,
@@ -479,6 +490,12 @@ async function fetchSupabaseAPI(action, payload = {}) {
             if (pkk.tglPengajuan) evaluasiObj.tglPengajuan = pkk.tglPengajuan;
             if (pkk.tglVerifikasi1) evaluasiObj.tglVerifikasi1 = pkk.tglVerifikasi1;
             if (pkk.tglVerifikasi2) evaluasiObj.tglVerifikasi2 = pkk.tglVerifikasi2;
+            if (pkk.tglPengesahan !== undefined) evaluasiObj.tglPengesahan = pkk.tglPengesahan;
+            if (pkk.pengesahNip !== undefined) evaluasiObj.pengesahNip = pkk.pengesahNip;
+            if (pkk.pengesahNama !== undefined) evaluasiObj.pengesahNama = pkk.pengesahNama;
+            if (pkk.pengesahJabatan !== undefined) evaluasiObj.pengesahJabatan = pkk.pengesahJabatan;
+            if (pkk.pengesahanData !== undefined) evaluasiObj.pengesahanData = pkk.pengesahanData;
+            if (pkk.statusPengesahan !== undefined) evaluasiObj.statusPengesahan = pkk.statusPengesahan;
 
             const row = {
                 nip: pkk.nip || '',
@@ -512,6 +529,154 @@ async function fetchSupabaseAPI(action, payload = {}) {
                 }
             }
             return { success: true, id: savedId, message: `Evaluasi Mandiri berhasil disimpan dengan status ${pkk.status || 'Draft'}.` };
+        }
+
+        if (action === 'sahkanPKK') {
+            const { id, nip, tglPengesahan, pengesahNip, pengesahNama, pengesahJabatan, catatan } = payload;
+            let filterId = id && !String(id).startsWith('PKK_') ? (isNaN(parseInt(id)) ? id : parseInt(id)) : null;
+
+            let query = sb.from('pkks').select('*');
+            if (filterId) query = query.eq('id', filterId);
+            else if (nip) query = query.eq('nip', nip).order('id', { ascending: false }).limit(1);
+            else return { success: false, message: "ID atau NIP tidak valid" };
+
+            const { data: rows, error: fetchErr } = await query;
+            if (fetchErr || !rows || rows.length === 0) return { success: false, message: "Data PKK tidak ditemukan" };
+
+            const pkkRow = rows[0];
+            const evalObj = (typeof pkkRow.evaluasi_data === 'string' ? JSON.parse(pkkRow.evaluasi_data) : pkkRow.evaluasi_data) || {};
+
+            const dateStr = tglPengesahan || new Date().toISOString().split('T')[0];
+            evalObj.tglPengesahan = dateStr;
+            evalObj.pengesahNip = pengesahNip || currentUser?.nip || '';
+            evalObj.pengesahNama = pengesahNama || currentUser?.nama || '';
+            evalObj.pengesahJabatan = pengesahJabatan || currentUser?.jabatan || '';
+            evalObj.statusPengesahan = 'Disahkan';
+            evalObj.pengesahanData = {
+                tanggal: dateStr,
+                pengesahNip: pengesahNip || currentUser?.nip || '',
+                pengesahNama: pengesahNama || currentUser?.nama || '',
+                pengesahJabatan: pengesahJabatan || currentUser?.jabatan || '',
+                catatan: catatan || '',
+                disahkanPada: new Date().toISOString()
+            };
+
+            const { error: upErr } = await sb.from('pkks').update({ evaluasi_data: evalObj }).eq('id', pkkRow.id);
+            if (upErr) throw upErr;
+
+            return { success: true, message: `PKK ${pkkRow.nama} berhasil disahkan!`, tglPengesahan: dateStr };
+        }
+
+        if (action === 'batalkanPengesahan') {
+            const { id, nip } = payload;
+            let filterId = id && !String(id).startsWith('PKK_') ? (isNaN(parseInt(id)) ? id : parseInt(id)) : null;
+
+            let query = sb.from('pkks').select('*');
+            if (filterId) query = query.eq('id', filterId);
+            else if (nip) query = query.eq('nip', nip).order('id', { ascending: false }).limit(1);
+            else return { success: false, message: "ID atau NIP tidak valid" };
+
+            const { data: rows, error: fetchErr } = await query;
+            if (fetchErr || !rows || rows.length === 0) return { success: false, message: "Data PKK tidak ditemukan" };
+
+            const pkkRow = rows[0];
+            const evalObj = (typeof pkkRow.evaluasi_data === 'string' ? JSON.parse(pkkRow.evaluasi_data) : pkkRow.evaluasi_data) || {};
+
+            delete evalObj.tglPengesahan;
+            delete evalObj.pengesahNip;
+            delete evalObj.pengesahNama;
+            delete evalObj.pengesahJabatan;
+            delete evalObj.pengesahanData;
+            evalObj.statusPengesahan = 'Belum Disahkan';
+
+            const { error: upErr } = await sb.from('pkks').update({ evaluasi_data: evalObj }).eq('id', pkkRow.id);
+            if (upErr) throw upErr;
+
+            return { success: true, message: `Pengesahan PKK ${pkkRow.nama} telah dibatalkan.` };
+        }
+
+        if (action === 'getSettingPengesahan') {
+            // 1. Coba baca dari tabel setting_pengesahan Supabase
+            try {
+                const { data: sRows, error: sErr } = await sb.from('setting_pengesahan').select('*');
+                if (!sErr && sRows && sRows.length > 0) {
+                    const mapped = sRows.map(r => ({
+                        unit: r.unit,
+                        tipePengesah: r.tipe_pengesah || 'GMP',
+                        pengesahNip: r.pengesah_nip || '',
+                        pengesahNama: r.pengesah_nama || '',
+                        pengesahJabatan: r.pengesah_jabatan || ''
+                    }));
+                    setLocalCache('pkk_setting_pengesahan_cache', mapped);
+                    return { success: true, data: mapped };
+                }
+            } catch (e) {
+                // Abaikan jika tabel belum ada
+            }
+
+            // 2. Coba baca dari config pengumuman Supabase
+            try {
+                const { data: pRows } = await sb.from('pengumuman').select('*').eq('judul', '__CONFIG_SETTING_PENGESAHAN__').limit(1);
+                if (pRows && pRows.length > 0 && pRows[0].deskripsi) {
+                    const parsed = JSON.parse(pRows[0].deskripsi);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        setLocalCache('pkk_setting_pengesahan_cache', parsed);
+                        return { success: true, data: parsed };
+                    }
+                }
+            } catch (e) {
+                console.warn("Notice: Fetch setting pengesahan from config:", e);
+            }
+
+            // 3. Coba baca dari local cache
+            const local = getLocalCache('pkk_setting_pengesahan_cache');
+            if (local && Array.isArray(local) && local.length > 0) {
+                return { success: true, data: local };
+            }
+
+            // 4. Fallback ke DEFAULT_SETTING_PENGESAHAN
+            return { success: true, data: DEFAULT_SETTING_PENGESAHAN };
+        }
+
+        if (action === 'saveSettingPengesahan') {
+            const settings = payload.settings || [];
+            setLocalCache('pkk_setting_pengesahan_cache', settings);
+
+            // Coba simpan ke tabel setting_pengesahan jika ada
+            try {
+                const rows = settings.map(s => ({
+                    unit: s.unit,
+                    tipe_pengesah: s.tipePengesah || 'GMP',
+                    pengesah_nip: s.pengesahNip || '',
+                    pengesah_nama: s.pengesahNama || '',
+                    pengesah_jabatan: s.pengesahJabatan || ''
+                }));
+                await sb.from('setting_pengesahan').upsert(rows, { onConflict: 'unit' });
+            } catch (e) {
+                // Abaikan
+            }
+
+            // Simpan juga ke pengumuman sebagai shared persistent backup
+            try {
+                const jsonStr = JSON.stringify(settings);
+                const { data: existing } = await sb.from('pengumuman').select('id').eq('judul', '__CONFIG_SETTING_PENGESAHAN__');
+                if (existing && existing.length > 0) {
+                    await sb.from('pengumuman').update({
+                        deskripsi: jsonStr,
+                        tanggal: new Date().toISOString()
+                    }).eq('id', existing[0].id);
+                } else {
+                    await sb.from('pengumuman').insert([{
+                        judul: '__CONFIG_SETTING_PENGESAHAN__',
+                        deskripsi: jsonStr,
+                        tanggal: new Date().toISOString()
+                    }]);
+                }
+            } catch (e) {
+                console.warn("Notice: Sync setting pengesahan backup:", e);
+            }
+
+            return { success: true, message: "Setting pengesahan berhasil disimpan!" };
         }
 
         if (action === 'deletePKK') {
@@ -613,12 +778,14 @@ async function fetchSupabaseAPI(action, payload = {}) {
         if (action === 'getDashboard' || action === 'getPengumuman') {
             const { data, error } = await sb.from('pengumuman').select('*').order('id', { ascending: false });
             if (error) throw error;
-            const list = (data || []).map(p => ({
-                id: p.id,
-                judul: p.judul,
-                deskripsi: p.deskripsi,
-                tanggal: p.tanggal || (p.created_at ? p.created_at.split('T')[0] : '')
-            }));
+            const list = (data || [])
+                .filter(p => !p.judul || !String(p.judul).startsWith('__CONFIG_'))
+                .map(p => ({
+                    id: p.id,
+                    judul: p.judul,
+                    deskripsi: p.deskripsi,
+                    tanggal: p.tanggal || (p.created_at ? p.created_at.split('T')[0] : '')
+                }));
             return { success: true, pengumuman: list, data: list };
         }
 
@@ -1138,7 +1305,9 @@ const SHORT_MENU_TEXT = {
     "dashboard": "Dasbor",
     "manajemen_user": "User",
     "monitoring": "Monitoring",
+    "pengesahan": "Pengesahan",
     "settings": "Settings",
+    "setting_pengesahan": "Pengesah",
     "tahun_ajaran": "Periode",
     "ubah_password": "Password",
     "verifikasi": "Verifikasi",
@@ -1149,7 +1318,21 @@ const SHORT_MENU_TEXT = {
 };
 
 function renderSidebar() {
-    const menus = MENU_CONFIG[currentUser.level] || [];
+    let menus = [...(MENU_CONFIG[currentUser.level] || [])];
+
+    // Cek apakah user saat ini memiliki wewenang pengesahan berdasarkan settingan pengesahan unit
+    const cachedSettings = getLocalCache('pkk_setting_pengesahan_cache') || DEFAULT_SETTING_PENGESAHAN;
+    const isDesignatedPengesah = cachedSettings.some(s => String(s.pengesahNip).trim() === String(currentUser.nip).trim());
+    if (isDesignatedPengesah && !menus.some(m => m.id === 'pengesahan')) {
+        const verifIdx = menus.findIndex(m => m.id === 'verifikasi');
+        const newItem = { id: "pengesahan", icon: "fas fa-stamp", text: "Pengesahan PKK" };
+        if (verifIdx !== -1) {
+            menus.splice(verifIdx + 1, 0, newItem);
+        } else {
+            menus.push(newItem);
+        }
+    }
+
     elSidebarMenu.innerHTML = '';
 
     const elMobileBottomMenu = document.getElementById('mobile-bottom-menu');
@@ -1214,7 +1397,12 @@ function navigate(pageId) {
         }
     });
 
-    const menuInfo = MENU_CONFIG[currentUser.level].find(m => m.id === pageId);
+    const currentMenus = (MENU_CONFIG[currentUser.level] || []).concat([
+        { id: "pengesahan", text: "Pengesahan PKK" },
+        { id: "setting_pengesahan", text: "Setting Pengesahan" },
+        { id: "backup_data", text: "Backup & Restore Data" }
+    ]);
+    const menuInfo = currentMenus.find(m => m.id === pageId);
     elPageTitle.innerText = menuInfo ? menuInfo.text : pageId;
 
     renderPage(pageId);
@@ -1235,8 +1423,11 @@ function renderPage(pageId) {
         if (pageId === 'manajemen_user') initManajemenUser();
         if (pageId === 'evaluasi') initEvaluasiMandiri();
         if (pageId === 'verifikasi') initVerifikasi();
+        if (pageId === 'pengesahan') initPengesahan();
         if (pageId === 'ubah_password') initUbahPassword();
         if (pageId === 'settings') initSettings();
+        if (pageId === 'setting_pengesahan') initSettingPengesahan();
+        if (pageId === 'backup_data') initBackupData();
         if (pageId === 'tahun_ajaran') initTahunAjaran();
         if (pageId === 'form_ski') initFormSki();
         if (pageId === 'daftar_ski') initDaftarSki();
@@ -3102,6 +3293,907 @@ async function viewPKK(nip) {
     viewPKKPreview(nip);
 }
 
+// ===================================================
+// MODULE: PENGESAHAN DOKUMEN PKK & SETTING PENGESAHAN
+// ===================================================
+
+const DEFAULT_SETTING_PENGESAHAN = [
+    { unit: 'TK', tipePengesah: 'GMP', pengesahNip: '0489.0226.00', pengesahNama: 'Asep Ihsanudin, M.Pd.', pengesahJabatan: 'GM Pendidikan' },
+    { unit: 'SD', tipePengesah: 'GMP', pengesahNip: '0489.0226.00', pengesahNama: 'Asep Ihsanudin, M.Pd.', pengesahJabatan: 'GM Pendidikan' },
+    { unit: 'SMP', tipePengesah: 'GMP', pengesahNip: '0489.0226.00', pengesahNama: 'Asep Ihsanudin, M.Pd.', pengesahJabatan: 'GM Pendidikan' },
+    { unit: 'SMA', tipePengesah: 'GMP', pengesahNip: '0489.0226.00', pengesahNama: 'Asep Ihsanudin, M.Pd.', pengesahJabatan: 'GM Pendidikan' },
+    { unit: 'QMS', tipePengesah: 'Direktur', pengesahNip: '0885.0220.00', pengesahNama: 'Ahmad Abdul Wasiudin, M.Pd', pengesahJabatan: 'Direktur' },
+    { unit: 'Marketing & Komunikasi', tipePengesah: 'Direktur', pengesahNip: '0885.0220.00', pengesahNama: 'Ahmad Abdul Wasiudin, M.Pd', pengesahJabatan: 'Direktur' },
+    { unit: 'HRD', tipePengesah: 'GMO', pengesahNip: '0884.0710.00', pengesahNama: 'Dina Fitriani, S.Pt', pengesahJabatan: 'GM Operasional' },
+    { unit: 'GA', tipePengesah: 'GMO', pengesahNip: '0884.0710.00', pengesahNama: 'Dina Fitriani, S.Pt', pengesahJabatan: 'GM Operasional' },
+    { unit: 'FA', tipePengesah: 'GMO', pengesahNip: '0884.0710.00', pengesahNama: 'Dina Fitriani, S.Pt', pengesahJabatan: 'GM Operasional' },
+    { unit: 'Direksi', tipePengesah: 'Direktur', pengesahNip: '0885.0220.00', pengesahNama: 'Ahmad Abdul Wasiudin, M.Pd', pengesahJabatan: 'Direktur' },
+    { unit: 'Pusat', tipePengesah: 'GMO', pengesahNip: '0884.0710.00', pengesahNama: 'Dina Fitriani, S.Pt', pengesahJabatan: 'GM Operasional' }
+];
+
+function getPengesahForUnit(unitName, usersList = []) {
+    const rawUnit = String(unitName || '').trim();
+    const cleanUnit = rawUnit.toLowerCase();
+
+    const settings = getLocalCache('pkk_setting_pengesahan_cache') || DEFAULT_SETTING_PENGESAHAN;
+
+    let match = settings.find(s => s.unit && s.unit.toLowerCase() === cleanUnit);
+    if (!match) {
+        match = settings.find(s => s.unit && (cleanUnit.includes(s.unit.toLowerCase()) || s.unit.toLowerCase().includes(cleanUnit)));
+    }
+
+    if (match) {
+        const matchedUser = (usersList || []).find(u => String(u.nip).trim() === String(match.pengesahNip).trim());
+        let headerTitle = 'GMO / GMP';
+        if (match.tipePengesah === 'Direktur') headerTitle = 'Direktur';
+        else if (match.tipePengesah === 'GMP') headerTitle = 'GMP (Pendidikan)';
+        else if (match.tipePengesah === 'GMO') headerTitle = 'GMO (Operasional)';
+        else if (match.pengesahJabatan) headerTitle = match.pengesahJabatan;
+
+        return {
+            unit: rawUnit,
+            tipePengesah: match.tipePengesah || 'GMP',
+            nip: match.pengesahNip || (matchedUser ? matchedUser.nip : ''),
+            nama: match.pengesahNama || (matchedUser ? matchedUser.nama : ''),
+            jabatan: match.pengesahJabatan || (matchedUser ? matchedUser.jabatan : ''),
+            headerTitle: headerTitle
+        };
+    }
+
+    const isPendidikan = ['tk', 'sd', 'smp', 'sma'].some(u => cleanUnit.includes(u));
+    const isDirektur = ['qms', 'qrd', 'marketing', 'markom', 'direksi'].some(u => cleanUnit.includes(u));
+
+    if (isDirektur) {
+        const dirUser = (usersList || []).find(u => String(u.level || '').toLowerCase() === 'direktur' || String(u.jabatan || '').toLowerCase().includes('direktur'));
+        return {
+            unit: rawUnit,
+            tipePengesah: 'Direktur',
+            nip: dirUser ? dirUser.nip : '0885.0220.00',
+            nama: dirUser ? dirUser.nama : 'Ahmad Abdul Wasiudin, M.Pd',
+            jabatan: dirUser ? dirUser.jabatan : 'Direktur',
+            headerTitle: 'Direktur'
+        };
+    } else if (isPendidikan) {
+        const gmpUser = (usersList || []).find(u => (String(u.level || '').toLowerCase() === 'general manager' || String(u.jabatan || '').toLowerCase().includes('gm')) && String(u.jabatan || '').toLowerCase().includes('pendidikan'));
+        return {
+            unit: rawUnit,
+            tipePengesah: 'GMP',
+            nip: gmpUser ? gmpUser.nip : '0489.0226.00',
+            nama: gmpUser ? gmpUser.nama : 'Asep Ihsanudin, M.Pd.',
+            jabatan: gmpUser ? gmpUser.jabatan : 'GM Pendidikan',
+            headerTitle: 'GMP (Pendidikan)'
+        };
+    } else {
+        const gmoUser = (usersList || []).find(u => (String(u.level || '').toLowerCase() === 'general manager' || String(u.jabatan || '').toLowerCase().includes('gm')) && (String(u.jabatan || '').toLowerCase().includes('operasional') || !String(u.jabatan || '').toLowerCase().includes('pendidikan')));
+        return {
+            unit: rawUnit,
+            tipePengesah: 'GMO',
+            nip: gmoUser ? gmoUser.nip : '0884.0710.00',
+            nama: gmoUser ? gmoUser.nama : 'Dina Fitriani, S.Pt',
+            jabatan: gmoUser ? gmoUser.jabatan : 'GM Operasional',
+            headerTitle: 'GMO (Operasional)'
+        };
+    }
+}
+
+// --- LOGIKA HALAMAN PENGESAHAN PKK ---
+let _pengesahanMasterList = [];
+let _pengesahanActiveTab = 'pending';
+let _pengesahanSelectedIds = new Set();
+let _pengesahanCurrentTarget = null;
+
+async function initPengesahan() {
+    const tbody = document.getElementById('tbody-pengesahan');
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:35px; color:#64748b;"><i class="fas fa-spinner fa-spin fa-2x"></i><br><br>Memuat data PKK yang telah selesai dinilai atasan...</td></tr>`;
+
+    // Ambil data users, settings pengesahan, dan pkks
+    const [usersRes, pkksRes, settingRes] = await Promise.all([
+        loadUsersData(),
+        fetchGasAPI('getPKKs'),
+        fetchGasAPI('getSettingPengesahan')
+    ]);
+
+    const usersList = usersRes || [];
+    const rawPkks = (pkksRes && pkksRes.success && Array.isArray(pkksRes.data)) ? pkksRes.data : [];
+    const settingsList = (settingRes && settingRes.success && Array.isArray(settingRes.data)) ? settingRes.data : DEFAULT_SETTING_PENGESAHAN;
+    setLocalCache('pkk_setting_pengesahan_cache', settingsList);
+
+    // FILTER MUTLAK: Hanya PKK yang SUDAH SELESAI dinilai oleh atasan (status === 'Selesai')
+    // Jika belum selesai dinilai atasan (Draft, Menunggu Verifikasi 1, Menunggu Verifikasi 2), TIDAK TAMPIL!
+    const completedPkks = rawPkks.filter(p => p.status === 'Selesai');
+
+    // Filter hak akses wewenang pengesahan user login
+    const curLevel = String(currentUser?.level || '').trim();
+    const curNip = String(currentUser?.nip || '').trim();
+    const curJabatan = String(currentUser?.jabatan || '').toLowerCase().trim();
+
+    _pengesahanMasterList = completedPkks.filter(p => {
+        // Super Admin memiliki akses penuh ke seluruh unit
+        if (curLevel === 'Super Admin') return true;
+
+        const uUnit = (p.unit || '').trim();
+        const pengesahInfo = getPengesahForUnit(uUnit, usersList);
+
+        // Jika user secara eksplisit ditunjuk sebagai pengesah berdasarkan NIP
+        if (pengesahInfo && String(pengesahInfo.nip).trim() === curNip) return true;
+
+        // Jika user adalah Direktur dan unit ditujukan untuk Direktur
+        if (curLevel === 'Direktur' && pengesahInfo.tipePengesah === 'Direktur') return true;
+
+        // Jika user adalah General Manager:
+        if (curLevel === 'General Manager') {
+            const isGmp = curJabatan.includes('pendidikan') || curJabatan.includes('gmp');
+            const isGmo = curJabatan.includes('operasional') || curJabatan.includes('gmo') || !curJabatan.includes('pendidikan');
+            if (isGmp && pengesahInfo.tipePengesah === 'GMP') return true;
+            if (isGmo && pengesahInfo.tipePengesah === 'GMO') return true;
+        }
+
+        return false;
+    });
+
+    _pengesahanSelectedIds.clear();
+    updateBatchButtonUI();
+
+    // Setup Unit Filter Dropdown
+    const unitSelect = document.getElementById('filter-pengesahan-unit');
+    if (unitSelect) {
+        const units = Array.from(new Set(_pengesahanMasterList.map(p => p.unit).filter(Boolean))).sort();
+        unitSelect.innerHTML = `<option value="">-- Semua Unit (${units.length}) --</option>` +
+            units.map(u => `<option value="${u}">${u}</option>`).join('');
+        unitSelect.onchange = () => renderPengesahanTable(usersList);
+    }
+
+    // Setup Tahun Ajaran Filter Dropdown
+    const taSelect = document.getElementById('filter-pengesahan-ta');
+    if (taSelect) {
+        const tas = Array.from(new Set(_pengesahanMasterList.map(p => p.tahunAjaran).filter(Boolean))).sort();
+        taSelect.innerHTML = `<option value="">Semua TA</option>` +
+            tas.map(t => `<option value="${t}">TA. ${t}</option>`).join('');
+        taSelect.onchange = () => renderPengesahanTable(usersList);
+    }
+
+    // Setup Search
+    const searchInput = document.getElementById('search-pengesahan-text');
+    if (searchInput) {
+        searchInput.oninput = () => renderPengesahanTable(usersList);
+    }
+
+    // Setup Tab Filters
+    const tabs = [
+        { id: 'tab-pengesahan-pending', key: 'pending' },
+        { id: 'tab-pengesahan-approved', key: 'approved' },
+        { id: 'tab-pengesahan-all', key: 'all' }
+    ];
+
+    tabs.forEach(t => {
+        const btn = document.getElementById(t.id);
+        if (btn) {
+            btn.onclick = () => {
+                _pengesahanActiveTab = t.key;
+                tabs.forEach(o => document.getElementById(o.id)?.classList.remove('active'));
+                btn.classList.add('active');
+                _pengesahanSelectedIds.clear();
+                updateBatchButtonUI();
+                renderPengesahanTable(usersList);
+            };
+        }
+    });
+
+    // Check All Checkbox
+    const checkAll = document.getElementById('check-all-pengesahan');
+    if (checkAll) {
+        checkAll.checked = false;
+        checkAll.onchange = () => {
+            const checkboxes = document.querySelectorAll('.check-item-pengesahan');
+            checkboxes.forEach(cb => {
+                cb.checked = checkAll.checked;
+                const id = cb.getAttribute('data-id');
+                if (checkAll.checked) _pengesahanSelectedIds.add(id);
+                else _pengesahanSelectedIds.delete(id);
+            });
+            updateBatchButtonUI();
+        };
+    }
+
+    // Refresh Button
+    const btnRefresh = document.getElementById('btn-refresh-pengesahan');
+    if (btnRefresh) {
+        btnRefresh.onclick = () => initPengesahan();
+    }
+
+    // Batch Action Button
+    const btnBatch = document.getElementById('btn-batch-sahkan-pkk');
+    if (btnBatch) {
+        btnBatch.onclick = () => openModalBatchSahkan();
+    }
+
+    setupModalSahkanEvents(usersList);
+
+    // Initial render
+    renderPengesahanTable(usersList);
+}
+
+function updateBatchButtonUI() {
+    const btnBatch = document.getElementById('btn-batch-sahkan-pkk');
+    const countSpan = document.getElementById('count-selected-pkk');
+    const count = _pengesahanSelectedIds.size;
+
+    if (countSpan) countSpan.innerText = count;
+    if (btnBatch) {
+        if (count > 0) {
+            btnBatch.style.display = 'inline-flex';
+        } else {
+            btnBatch.style.display = 'none';
+        }
+    }
+}
+
+function renderPengesahanTable(usersList = []) {
+    const tbody = document.getElementById('tbody-pengesahan');
+    if (!tbody) return;
+
+    const unitFilter = document.getElementById('filter-pengesahan-unit')?.value || '';
+    const taFilter = document.getElementById('filter-pengesahan-ta')?.value || '';
+    const search = (document.getElementById('search-pengesahan-text')?.value || '').toLowerCase().trim();
+
+    // Hitung statistik
+    const totalCount = _pengesahanMasterList.length;
+    const approvedCount = _pengesahanMasterList.filter(p => Boolean(p.tglPengesahan || (p.pengesahanData && p.pengesahanData.tanggal))).length;
+    const pendingCount = totalCount - approvedCount;
+
+    document.getElementById('stat-pengesahan-total').innerText = totalCount;
+    document.getElementById('stat-pengesahan-pending').innerText = pendingCount;
+    document.getElementById('stat-pengesahan-approved').innerText = approvedCount;
+
+    const badgePending = document.getElementById('badge-tab-pending');
+    const badgeApproved = document.getElementById('badge-tab-approved');
+    if (badgePending) badgePending.innerText = pendingCount;
+    if (badgeApproved) badgeApproved.innerText = approvedCount;
+
+    // Filter daftar sesuai tab aktif
+    let filtered = _pengesahanMasterList.filter(p => {
+        const isDisahkan = Boolean(p.tglPengesahan || (p.pengesahanData && p.pengesahanData.tanggal));
+        if (_pengesahanActiveTab === 'pending' && isDisahkan) return false;
+        if (_pengesahanActiveTab === 'approved' && !isDisahkan) return false;
+
+        if (unitFilter && String(p.unit).trim() !== unitFilter) return false;
+        if (taFilter && String(p.tahunAjaran).trim() !== taFilter) return false;
+
+        if (search) {
+            const matchName = String(p.nama || '').toLowerCase().includes(search);
+            const matchNip = String(p.nip || '').toLowerCase().includes(search);
+            if (!matchName && !matchNip) return false;
+        }
+
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" style="text-align:center; padding:35px; color:#94a3b8;">
+                    <i class="fas fa-clipboard-check fa-2x" style="opacity:0.4; margin-bottom:8px;"></i>
+                    <div>Tidak ada dokumen PKK yang sesuai filter saat ini.</div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map((p, idx) => {
+        const isDisahkan = Boolean(p.tglPengesahan || (p.pengesahanData && p.pengesahanData.tanggal));
+        const pengesahInfo = getPengesahForUnit(p.unit, usersList);
+        const uObj = usersList.find(u => String(u.nip).trim() === String(p.nip).trim()) || {};
+        const jabatan = p.jabatan || uObj.jabatan || p.level || '-';
+
+        // Tanggal Verifikasi Atasan
+        const tglDinilai = p.tglVerifikasi2 || p.tglVerifikasi1 || p.tanggal || '-';
+
+        let badgeTipeCls = 'badge-pengesah-gmp';
+        if (pengesahInfo.tipePengesah === 'GMO') badgeTipeCls = 'badge-pengesah-gmo';
+        else if (pengesahInfo.tipePengesah === 'Direktur') badgeTipeCls = 'badge-pengesah-direktur';
+
+        const isChecked = _pengesahanSelectedIds.has(String(p.id));
+
+        return `
+            <tr style="border-bottom:1px solid #f1f5f9; ${isChecked ? 'background:#f0fdf4;' : ''}">
+                <td style="text-align:center;">
+                    ${!isDisahkan ? `
+                        <input type="checkbox" class="check-item-pengesahan" data-id="${p.id}" data-nip="${p.nip}" data-nama="${p.nama.replace(/"/g, '&quot;')}" ${isChecked ? 'checked' : ''} style="cursor:pointer; width:16px; height:16px;">
+                    ` : `
+                        <i class="fas fa-check text-success" title="Sudah Disahkan"></i>
+                    `}
+                </td>
+                <td style="text-align:center; font-weight:600; color:#64748b;">${idx + 1}</td>
+                <td>
+                    <div style="font-weight:700; color:#1e293b;">${p.nama}</div>
+                    <div style="font-size:0.75rem; color:#64748b;">NIP: ${p.nip}</div>
+                </td>
+                <td>
+                    <div style="font-weight:600; color:#334155;">${jabatan}</div>
+                    <span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:12px; font-weight:600; font-size:0.75rem;">
+                        ${p.unit}
+                    </span>
+                </td>
+                <td style="text-align:center;">
+                    <div style="font-weight:800; font-size:1rem; color:#036F3E;">${p.finalScore || 0}</div>
+                    <span class="badge" style="background:#dcfce7; color:#166534; font-size:0.72rem; padding:2px 6px;">
+                        ${p.finalGrade || '-'}
+                    </span>
+                </td>
+                <td style="text-align:center; font-size:0.82rem; color:#475569;">
+                    ${formatDateSimple(tglDinilai)}
+                </td>
+                <td style="text-align:center;">
+                    <span class="${badgeTipeCls}">${pengesahInfo.tipePengesah}</span>
+                    <div style="font-size:0.76rem; color:#475569; margin-top:2px; font-weight:600;">
+                        ${isDisahkan ? (p.pengesahNama || (p.pengesahanData && p.pengesahanData.pengesahNama) || pengesahInfo.nama) : pengesahInfo.nama}
+                    </div>
+                </td>
+                <td style="text-align:center;">
+                    ${isDisahkan ? `
+                        <span class="status-badge status-approved" style="font-size:0.72rem;">
+                            <i class="fas fa-stamp"></i> Disahkan<br>
+                            <span style="font-size:0.68rem; opacity:0.85;">${formatDateSimple(p.tglPengesahan)}</span>
+                        </span>
+                    ` : `
+                        <span class="status-badge status-pending" style="font-size:0.72rem;">
+                            <i class="fas fa-clock"></i> Belum Disahkan
+                        </span>
+                    `}
+                </td>
+                <td style="text-align:center; white-space:nowrap;">
+                    <div style="display:inline-flex; gap:6px; align-items:center;">
+                        <button type="button" class="btn-secondary" style="padding:5px 10px; font-size:0.78rem;" title="Lihat Formulir Lengkap" onclick="viewPKKPreview('${p.nip}')">
+                            <i class="fas fa-eye"></i> Detail
+                        </button>
+                        ${!isDisahkan ? `
+                            <button type="button" class="btn-stamp-action" style="padding:5px 12px; font-size:0.78rem;" onclick="openModalSingleSahkan('${p.id}', '${p.nip}', '${p.nama.replace(/'/g, "\\'")}', '${p.unit}')">
+                                <i class="fas fa-stamp"></i> Sahkan
+                            </button>
+                        ` : `
+                            <button type="button" class="btn-secondary" style="padding:5px 10px; font-size:0.78rem; color:#dc2626;" title="Batalkan Pengesahan" onclick="batalkanPengesahanHandler('${p.id}', '${p.nip}', '${p.nama.replace(/'/g, "\\'")}')">
+                                <i class="fas fa-undo"></i> Batal
+                            </button>
+                        `}
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    // Attach row checkbox change event
+    tbody.querySelectorAll('.check-item-pengesahan').forEach(cb => {
+        cb.onchange = () => {
+            const id = cb.getAttribute('data-id');
+            if (cb.checked) _pengesahanSelectedIds.add(id);
+            else _pengesahanSelectedIds.delete(id);
+            updateBatchButtonUI();
+            const checkAll = document.getElementById('check-all-pengesahan');
+            if (checkAll) {
+                const totalVisible = tbody.querySelectorAll('.check-item-pengesahan').length;
+                checkAll.checked = totalVisible > 0 && _pengesahanSelectedIds.size === totalVisible;
+            }
+        };
+    });
+}
+
+function formatDateSimple(dateStr) {
+    if (!dateStr || dateStr === '-') return '-';
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return dateStr;
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+    } catch (e) {
+        return dateStr;
+    }
+}
+
+function openModalSingleSahkan(id, nip, nama, unit) {
+    _pengesahanCurrentTarget = { mode: 'single', id, nip, nama, unit };
+
+    const modal = document.getElementById('modal-sahkan-pkk');
+    const targetInfo = document.getElementById('modal-sahkan-target-info');
+    const inputDate = document.getElementById('input-modal-tgl-pengesahan');
+    const inputPengesah = document.getElementById('input-modal-pengesah-name');
+    const inputNotes = document.getElementById('input-modal-catatan-pengesahan');
+
+    if (!modal) return;
+
+    // Default tanggal hari ini (YYYY-MM-DD)
+    const today = new Date().toISOString().split('T')[0];
+    if (inputDate) inputDate.value = today;
+
+    if (inputPengesah) {
+        inputPengesah.value = `${currentUser?.nama || 'Pejabat Pengesah'} (${currentUser?.jabatan || currentUser?.level || 'Pengesah'})`;
+    }
+
+    if (inputNotes) inputNotes.value = '';
+
+    if (targetInfo) {
+        targetInfo.innerHTML = `
+            <div><strong>Pegawai:</strong> ${nama} (NIP: ${nip})</div>
+            <div><strong>Unit Kerja:</strong> ${unit || '-'}</div>
+            <div style="font-size:0.8rem; color:#15803d; margin-top:4px;">
+                <i class="fas fa-check-circle"></i> PKK telah selesai diverifikasi oleh atasan langsung dan siap disahkan.
+            </div>
+        `;
+    }
+
+    modal.style.display = 'flex';
+}
+
+function openModalBatchSahkan() {
+    if (_pengesahanSelectedIds.size === 0) {
+        showToast("Pilih minimal 1 dokumen PKK untuk disahkan.", "warning");
+        return;
+    }
+
+    const selectedList = _pengesahanMasterList.filter(p => _pengesahanSelectedIds.has(String(p.id)));
+    _pengesahanCurrentTarget = { mode: 'batch', items: selectedList };
+
+    const modal = document.getElementById('modal-sahkan-pkk');
+    const targetInfo = document.getElementById('modal-sahkan-target-info');
+    const inputDate = document.getElementById('input-modal-tgl-pengesahan');
+    const inputPengesah = document.getElementById('input-modal-pengesah-name');
+    const inputNotes = document.getElementById('input-modal-catatan-pengesahan');
+
+    if (!modal) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    if (inputDate) inputDate.value = today;
+
+    if (inputPengesah) {
+        inputPengesah.value = `${currentUser?.nama || 'Pejabat Pengesah'} (${currentUser?.jabatan || currentUser?.level || 'Pengesah'})`;
+    }
+
+    if (inputNotes) inputNotes.value = '';
+
+    if (targetInfo) {
+        targetInfo.innerHTML = `
+            <div><strong>Jumlah Terpilih:</strong> ${selectedList.length} dokumen PKK</div>
+            <div style="font-size:0.8rem; color:#15803d; margin-top:4px;">
+                <i class="fas fa-check-double"></i> Seluruh ${selectedList.length} PKK ini akan disahkan serentak dengan tanggal yang sama.
+            </div>
+        `;
+    }
+
+    modal.style.display = 'flex';
+}
+
+function setupModalSahkanEvents(usersList) {
+    const modal = document.getElementById('modal-sahkan-pkk');
+    const btnClose = document.getElementById('btn-close-modal-sahkan');
+    const btnBatal = document.getElementById('btn-batal-modal-sahkan');
+    const form = document.getElementById('form-confirm-pengesahan');
+
+    const closeModal = () => {
+        if (modal) modal.style.display = 'none';
+        _pengesahanCurrentTarget = null;
+    };
+
+    if (btnClose) btnClose.onclick = closeModal;
+    if (btnBatal) btnBatal.onclick = closeModal;
+
+    if (form) {
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            if (!_pengesahanCurrentTarget) return;
+
+            const tglPengesahan = document.getElementById('input-modal-tgl-pengesahan')?.value;
+            const catatan = document.getElementById('input-modal-catatan-pengesahan')?.value || '';
+
+            if (!tglPengesahan) {
+                showToast("Silakan tentukan tanggal pengesahan dokumen.", "warning");
+                return;
+            }
+
+            const btnSubmit = document.getElementById('btn-submit-modal-sahkan');
+            const origText = btnSubmit ? btnSubmit.innerHTML : '';
+            if (btnSubmit) {
+                btnSubmit.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Memproses...`;
+                btnSubmit.disabled = true;
+            }
+
+            try {
+                if (_pengesahanCurrentTarget.mode === 'single') {
+                    const target = _pengesahanCurrentTarget;
+                    const res = await fetchGasAPI('sahkanPKK', {
+                        id: target.id,
+                        nip: target.nip,
+                        tglPengesahan: tglPengesahan,
+                        pengesahNip: currentUser?.nip || '',
+                        pengesahNama: currentUser?.nama || '',
+                        pengesahJabatan: currentUser?.jabatan || '',
+                        catatan: catatan
+                    });
+
+                    if (res && res.success) {
+                        showToast(`PKK ${target.nama} berhasil disahkan!`, 'success');
+                    } else {
+                        showToast(res?.message || 'Gagal mengesahkan PKK.', 'error');
+                    }
+                } else if (_pengesahanCurrentTarget.mode === 'batch') {
+                    const items = _pengesahanCurrentTarget.items || [];
+                    let successCount = 0;
+
+                    for (const item of items) {
+                        try {
+                            const res = await fetchGasAPI('sahkanPKK', {
+                                id: item.id,
+                                nip: item.nip,
+                                tglPengesahan: tglPengesahan,
+                                pengesahNip: currentUser?.nip || '',
+                                pengesahNama: currentUser?.nama || '',
+                                pengesahJabatan: currentUser?.jabatan || '',
+                                catatan: catatan
+                            });
+                            if (res && res.success) successCount++;
+                        } catch (err) {
+                            console.error("Batch sahkan item err:", err);
+                        }
+                    }
+
+                    showToast(`Berhasil mengesahkan ${successCount} dari ${items.length} dokumen PKK.`, 'success');
+                }
+
+                closeModal();
+                await initPengesahan();
+            } catch (err) {
+                console.error("Error in pengesahan submission:", err);
+                showToast("Terjadi kesalahan saat memproses pengesahan.", "error");
+            } finally {
+                if (btnSubmit) {
+                    btnSubmit.innerHTML = origText;
+                    btnSubmit.disabled = false;
+                }
+            }
+        };
+    }
+}
+
+async function batalkanPengesahanHandler(id, nip, nama) {
+    const confirmed = typeof window.showCustomConfirm === 'function'
+        ? await window.showCustomConfirm(`Apakah Anda yakin ingin membatalkan pengesahan untuk PKK ${nama}? Dokumen akan kembali ke status Belum Disahkan.`, "Batalkan Pengesahan", "fa-undo", "danger", "Ya, Batalkan")
+        : confirm(`Apakah Anda yakin ingin membatalkan pengesahan untuk PKK ${nama}?`);
+
+    if (!confirmed) return;
+
+    try {
+        const res = await fetchGasAPI('batalkanPengesahan', { id, nip });
+        if (res && res.success) {
+            showToast(`Pengesahan PKK ${nama} telah dibatalkan.`, 'info');
+            await initPengesahan();
+        } else {
+            showToast(res?.message || 'Gagal membatalkan pengesahan.', 'error');
+        }
+    } catch (err) {
+        console.error("Error cancel pengesahan:", err);
+        showToast("Terjadi kesalahan saat membatalkan pengesahan.", "error");
+    }
+}
+
+// --- LOGIKA HALAMAN SETTING PENGESAHAN ---
+let _currentSettingsPengesahanData = [];
+
+async function initSettingPengesahan() {
+    const tbody = document.getElementById('tbody-setting-pengesahan');
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:35px; color:#64748b;"><i class="fas fa-spinner fa-spin fa-2x"></i><br><br>Memuat data pengaturan pengesahan...</td></tr>`;
+
+    const [usersRes, settingsRes] = await Promise.all([
+        loadUsersData(),
+        fetchGasAPI('getSettingPengesahan')
+    ]);
+
+    const usersList = usersRes || [];
+    let settings = (settingsRes && settingsRes.success && Array.isArray(settingsRes.data) && settingsRes.data.length > 0)
+        ? settingsRes.data
+        : JSON.parse(JSON.stringify(DEFAULT_SETTING_PENGESAHAN));
+
+    // Gabungkan dengan unit-unit yang ada di database Users agar tidak ada unit yang tertinggal
+    const dbUnits = Array.from(new Set(usersList.map(u => (u.unit || '').trim()).filter(Boolean)));
+    dbUnits.forEach(u => {
+        if (!settings.some(s => s.unit && s.unit.toLowerCase() === u.toLowerCase())) {
+            // Auto default untuk unit baru
+            const fallback = getPengesahForUnit(u, usersList);
+            settings.push({
+                unit: u,
+                tipePengesah: fallback.tipePengesah,
+                pengesahNip: fallback.nip,
+                pengesahNama: fallback.nama,
+                pengesahJabatan: fallback.jabatan
+            });
+        }
+    });
+
+    _currentSettingsPengesahanData = settings;
+
+    // Tombol Reset ke Default
+    const btnReset = document.getElementById('btn-reset-default-setting-pengesahan');
+    if (btnReset) {
+        btnReset.onclick = async () => {
+            const confirmed = typeof window.showCustomConfirm === 'function'
+                ? await window.showCustomConfirm("Apakah Anda yakin ingin mengembalikan seluruh settingan pengesahan ke standar default organisasi?", "Reset ke Standar Default", "fa-undo", "primary", "Terapkan Default")
+                : confirm("Kembalikan settingan pengesahan ke standar default?");
+
+            if (confirmed) {
+                _currentSettingsPengesahanData = JSON.parse(JSON.stringify(DEFAULT_SETTING_PENGESAHAN));
+                renderSettingPengesahanTable(usersList);
+                showToast("Settingan telah dikembalikan ke standar default. Klik 'Simpan Pengaturan' untuk menerapkan permanen.", "info");
+            }
+        };
+    }
+
+    // Tombol Tambah Unit Custom
+    const btnAddUnit = document.getElementById('btn-tambah-unit-pengesahan');
+    if (btnAddUnit) {
+        btnAddUnit.onclick = () => openModalAddCustomUnit(usersList);
+    }
+
+    // Tombol Simpan Pengaturan
+    const btnSave = document.getElementById('btn-save-setting-pengesahan');
+    if (btnSave) {
+        btnSave.onclick = async () => {
+            const orig = btnSave.innerHTML;
+            btnSave.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Menyimpan...`;
+            btnSave.disabled = true;
+
+            try {
+                const res = await fetchGasAPI('saveSettingPengesahan', { settings: _currentSettingsPengesahanData });
+                if (res && res.success) {
+                    showToast("Pengaturan pengesahan unit berhasil disimpan!", "success");
+                } else {
+                    showToast(res?.message || "Gagal menyimpan pengaturan.", "error");
+                }
+            } catch (err) {
+                console.error("Save setting pengesahan error:", err);
+                showToast("Terjadi kesalahan saat menyimpan pengaturan.", "error");
+            } finally {
+                btnSave.innerHTML = orig;
+                btnSave.disabled = false;
+            }
+        };
+    }
+
+    renderSettingPengesahanTable(usersList);
+}
+
+function renderSettingPengesahanTable(usersList = []) {
+    const tbody = document.getElementById('tbody-setting-pengesahan');
+    if (!tbody) return;
+
+    if (_currentSettingsPengesahanData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:#94a3b8;">Belum ada konfigurasi unit.</td></tr>`;
+        return;
+    }
+
+    // Daftar pejabat pimpinan untuk dropdown (Direktur, GM, Manager)
+    const leadersList = usersList.filter(u => {
+        const lvl = (u.level || '').toLowerCase();
+        const jab = (u.jabatan || '').toLowerCase();
+        return lvl.includes('direktur') || lvl.includes('general manager') || lvl.includes('manager') ||
+               jab.includes('gm') || jab.includes('direktur') || jab.includes('kepala');
+    });
+
+    tbody.innerHTML = _currentSettingsPengesahanData.map((item, idx) => {
+        let badgeTipeCls = 'badge-pengesah-gmp';
+        if (item.tipePengesah === 'GMO') badgeTipeCls = 'badge-pengesah-gmo';
+        else if (item.tipePengesah === 'Direktur') badgeTipeCls = 'badge-pengesah-direktur';
+        else if (item.tipePengesah === 'Custom') badgeTipeCls = 'badge-pengesah-custom';
+
+        return `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="text-align:center; font-weight:600; color:#64748b;">${idx + 1}</td>
+                <td>
+                    <span style="background:#f1f5f9; color:#1e293b; padding:4px 12px; border-radius:12px; font-weight:700; font-size:0.85rem; border:1px solid #cbd5e1; display:inline-block;">
+                        ${item.unit}
+                    </span>
+                </td>
+                <td>
+                    <select class="form-control select-tipe-pengesah-row" data-idx="${idx}" style="font-size:0.82rem; padding:6px 10px; font-weight:600;">
+                        <option value="GMP" ${item.tipePengesah === 'GMP' ? 'selected' : ''}>GMP (Pendidikan)</option>
+                        <option value="GMO" ${item.tipePengesah === 'GMO' ? 'selected' : ''}>GMO (Operasional)</option>
+                        <option value="Direktur" ${item.tipePengesah === 'Direktur' ? 'selected' : ''}>Direktur</option>
+                        <option value="Custom" ${item.tipePengesah === 'Custom' ? 'selected' : ''}>Pejabat Kustom</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="form-control select-user-pengesah-row" data-idx="${idx}" style="font-size:0.82rem; padding:6px 10px;">
+                        ${leadersList.map(u => {
+                            const isSelected = String(u.nip).trim() === String(item.pengesahNip).trim();
+                            return `<option value="${u.nip}" data-nama="${u.nama.replace(/"/g, '&quot;')}" data-jabatan="${(u.jabatan || u.level).replace(/"/g, '&quot;')}" ${isSelected ? 'selected' : ''}>
+                                ${u.nama} — ${u.jabatan || u.level} (NIP: ${u.nip})
+                            </option>`;
+                        }).join('')}
+                    </select>
+                </td>
+                <td style="text-align:center;">
+                    <div style="font-weight:700; color:#1e293b; font-size:0.82rem;" id="prev-nama-${idx}">${item.pengesahNama || '-'}</div>
+                    <div style="font-size:0.75rem; color:#64748b;" id="prev-nip-${idx}">NIP: ${item.pengesahNip || '-'}</div>
+                </td>
+                <td style="text-align:center;">
+                    <button type="button" class="btn-icon text-danger" title="Hapus Unit" onclick="deleteSettingPengesahanRow(${idx})" style="background:none; border:none; cursor:pointer; font-size:0.9rem;">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    // Attach event listeners to row selects
+    tbody.querySelectorAll('.select-tipe-pengesah-row').forEach(select => {
+        select.onchange = (e) => {
+            const idx = parseInt(select.getAttribute('data-idx'));
+            const newTipe = e.target.value;
+            _currentSettingsPengesahanData[idx].tipePengesah = newTipe;
+
+            // Auto select matching default leader based on category
+            if (newTipe === 'GMP') {
+                const gmp = usersList.find(u => (String(u.jabatan || '').toLowerCase().includes('pendidikan') || String(u.jabatan || '').toLowerCase().includes('gmp')) && String(u.level || '').toLowerCase().includes('general manager'));
+                if (gmp) {
+                    _currentSettingsPengesahanData[idx].pengesahNip = gmp.nip;
+                    _currentSettingsPengesahanData[idx].pengesahNama = gmp.nama;
+                    _currentSettingsPengesahanData[idx].pengesahJabatan = gmp.jabatan || 'GM Pendidikan';
+                } else {
+                    _currentSettingsPengesahanData[idx].pengesahNip = '0489.0226.00';
+                    _currentSettingsPengesahanData[idx].pengesahNama = 'Asep Ihsanudin, M.Pd.';
+                    _currentSettingsPengesahanData[idx].pengesahJabatan = 'GM Pendidikan';
+                }
+            } else if (newTipe === 'GMO') {
+                const gmo = usersList.find(u => (String(u.jabatan || '').toLowerCase().includes('operasional') || String(u.jabatan || '').toLowerCase().includes('gmo')) && String(u.level || '').toLowerCase().includes('general manager'));
+                if (gmo) {
+                    _currentSettingsPengesahanData[idx].pengesahNip = gmo.nip;
+                    _currentSettingsPengesahanData[idx].pengesahNama = gmo.nama;
+                    _currentSettingsPengesahanData[idx].pengesahJabatan = gmo.jabatan || 'GM Operasional';
+                } else {
+                    _currentSettingsPengesahanData[idx].pengesahNip = '0884.0710.00';
+                    _currentSettingsPengesahanData[idx].pengesahNama = 'Dina Fitriani, S.Pt';
+                    _currentSettingsPengesahanData[idx].pengesahJabatan = 'GM Operasional';
+                }
+            } else if (newTipe === 'Direktur') {
+                const dir = usersList.find(u => String(u.level || '').toLowerCase() === 'direktur' || String(u.jabatan || '').toLowerCase().includes('direktur'));
+                if (dir) {
+                    _currentSettingsPengesahanData[idx].pengesahNip = dir.nip;
+                    _currentSettingsPengesahanData[idx].pengesahNama = dir.nama;
+                    _currentSettingsPengesahanData[idx].pengesahJabatan = dir.jabatan || 'Direktur';
+                } else {
+                    _currentSettingsPengesahanData[idx].pengesahNip = '0885.0220.00';
+                    _currentSettingsPengesahanData[idx].pengesahNama = 'Ahmad Abdul Wasiudin, M.Pd';
+                    _currentSettingsPengesahanData[idx].pengesahJabatan = 'Direktur';
+                }
+            }
+
+            renderSettingPengesahanTable(usersList);
+        };
+    });
+
+    tbody.querySelectorAll('.select-user-pengesah-row').forEach(select => {
+        select.onchange = (e) => {
+            const idx = parseInt(select.getAttribute('data-idx'));
+            const opt = select.options[select.selectedIndex];
+            const nip = opt.value;
+            const nama = opt.getAttribute('data-nama');
+            const jabatan = opt.getAttribute('data-jabatan');
+
+            _currentSettingsPengesahanData[idx].pengesahNip = nip;
+            _currentSettingsPengesahanData[idx].pengesahNama = nama;
+            _currentSettingsPengesahanData[idx].pengesahJabatan = jabatan;
+
+            const prevNama = document.getElementById(`prev-nama-${idx}`);
+            const prevNip = document.getElementById(`prev-nip-${idx}`);
+            if (prevNama) prevNama.innerText = nama;
+            if (prevNip) prevNip.innerText = `NIP: ${nip}`;
+        };
+    });
+}
+
+function deleteSettingPengesahanRow(idx) {
+    if (_currentSettingsPengesahanData[idx]) {
+        const u = _currentSettingsPengesahanData[idx].unit;
+        _currentSettingsPengesahanData.splice(idx, 1);
+        renderSettingPengesahanTable(_skiUserData || []);
+        showToast(`Unit ${u} dihapus dari daftar settingan. Klik 'Simpan Pengaturan' untuk menerapkan.`, 'info');
+    }
+}
+
+function openModalAddCustomUnit(usersList = []) {
+    const modal = document.getElementById('modal-add-unit-pengesahan');
+    const form = document.getElementById('form-add-unit-pengesahan');
+    const inputName = document.getElementById('input-new-unit-name');
+    const selectTipe = document.getElementById('select-new-tipe-pengesah');
+    const selectCustom = document.getElementById('select-new-custom-user');
+    const customGroup = document.getElementById('form-group-custom-user');
+
+    if (!modal) return;
+
+    if (inputName) inputName.value = '';
+    if (selectTipe) selectTipe.value = 'GMO';
+    if (customGroup) customGroup.style.display = 'none';
+
+    // Populate custom leaders
+    if (selectCustom) {
+        const leaders = usersList.filter(u => {
+            const lvl = (u.level || '').toLowerCase();
+            return lvl.includes('direktur') || lvl.includes('gm') || lvl.includes('manager');
+        });
+        selectCustom.innerHTML = leaders.map(u => `
+            <option value="${u.nip}" data-nama="${u.nama.replace(/"/g, '&quot;')}" data-jabatan="${(u.jabatan || u.level).replace(/"/g, '&quot;')}">
+                ${u.nama} (${u.jabatan || u.level})
+            </option>
+        `).join('');
+    }
+
+    if (selectTipe) {
+        selectTipe.onchange = () => {
+            if (selectTipe.value === 'Custom') customGroup.style.display = 'block';
+            else customGroup.style.display = 'none';
+        };
+    }
+
+    const btnClose = document.getElementById('btn-close-modal-add-unit');
+    const btnBatal = document.getElementById('btn-batal-add-unit');
+    const closeModal = () => { modal.style.display = 'none'; };
+    if (btnClose) btnClose.onclick = closeModal;
+    if (btnBatal) btnBatal.onclick = closeModal;
+
+    if (form) {
+        form.onsubmit = (e) => {
+            e.preventDefault();
+            const unitName = (inputName?.value || '').trim();
+            if (!unitName) {
+                showToast("Nama unit kerja tidak boleh kosong.", "warning");
+                return;
+            }
+
+            if (_currentSettingsPengesahanData.some(s => s.unit && s.unit.toLowerCase() === unitName.toLowerCase())) {
+                showToast(`Unit ${unitName} sudah ada dalam daftar pengaturan.`, "warning");
+                return;
+            }
+
+            const tipe = selectTipe?.value || 'GMO';
+            let nip = '', nama = '', jabatan = '';
+
+            if (tipe === 'Custom') {
+                const opt = selectCustom.options[selectCustom.selectedIndex];
+                nip = opt ? opt.value : '';
+                nama = opt ? opt.getAttribute('data-nama') : '';
+                jabatan = opt ? opt.getAttribute('data-jabatan') : '';
+            } else {
+                const res = getPengesahForUnit(unitName, usersList);
+                nip = res.nip;
+                nama = res.nama;
+                jabatan = res.jabatan;
+            }
+
+            _currentSettingsPengesahanData.push({
+                unit: unitName,
+                tipePengesah: tipe,
+                pengesahNip: nip,
+                pengesahNama: nama,
+                pengesahJabatan: jabatan
+            });
+
+            closeModal();
+            renderSettingPengesahanTable(usersList);
+            showToast(`Unit ${unitName} berhasil ditambahkan! Jangan lupa klik 'Simpan Pengaturan'.`, 'success');
+        };
+    }
+
+    modal.style.display = 'flex';
+}
+
+// Global functions for inline onclick handlers
+window.openModalSingleSahkan = openModalSingleSahkan;
+window.batalkanPengesahanHandler = batalkanPengesahanHandler;
+window.deleteSettingPengesahanRow = deleteSettingPengesahanRow;
+
 // --- Page: Riwayat ---
 async function initRiwayat() {
     const tbody = document.getElementById('tbody-riwayat');
@@ -3236,8 +4328,12 @@ async function initMonitoring() {
         if (!pkk) return { label: 'Belum Mengisi', cls: 'status-empty', icon: 'fas fa-circle-xmark' };
         if (pkk.status === 'Draft') return { label: 'Draft', cls: 'status-draft', icon: 'fas fa-pen' };
         if (pkk.status === 'Menunggu Verifikasi 1') return { label: 'Menunggu Verifikasi Atasan 1', cls: 'status-pending', icon: 'fas fa-clock' };
-        if (pkk.status === 'Menunggu Verifikasi 2') return { label: 'Menunggu Verifikasi Atasan 2', cls: 'status-pending', icon: 'fas fa-clock' };
-        if (pkk.status === 'Selesai') return { label: 'Sudah Dinilai', cls: 'status-success', icon: 'fas fa-circle-check' };
+        if (pkk.status === 'Selesai') {
+            if (pkk.tglPengesahan || (pkk.pengesahanData && pkk.pengesahanData.tanggal)) {
+                return { label: 'Sudah Disahkan', cls: 'status-approved', icon: 'fas fa-stamp' };
+            }
+            return { label: 'Sudah Dinilai (Belum Disahkan)', cls: 'status-success', icon: 'fas fa-circle-check' };
+        }
         return { label: pkk.status, cls: 'status-pending', icon: 'fas fa-question' };
     };
 
@@ -3552,25 +4648,28 @@ async function viewPKKPreview(nip) {
     const atasan1Name = uAtasan1 ? uAtasan1.nama : (atasan1Nip && atasan1Nip !== '-' && atasan1Nip !== '0' && atasan1Nip.toLowerCase() !== 'null' ? atasan1Nip : '-');
     const atasan2Name = uAtasan2 ? uAtasan2.nama : (atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Nip.toLowerCase() !== 'null' ? atasan2Nip : '-');
 
-    // GMO / GMP resolution
-    const empUnit = String(userInfo.unit || pkk.unit || '').trim().toLowerCase();
-    const isPendidikan = ['tk', 'sd', 'smp', 'sma'].some(u => empUnit.includes(u));
+    // GMO / GMP / Direktur resolution via Setting Pengesahan
+    const empUnit = String(userInfo.unit || pkk.unit || '').trim();
+    const resolvedPengesah = getPengesahForUnit(empUnit, _previewUsersCache);
 
-    const gmUser = (_previewUsersCache || []).find(u => {
-        const uLevel = String(u.level || '').trim().toLowerCase();
-        const uJabatan = String(u.jabatan || '').trim().toLowerCase();
-        if (uLevel === 'general manager' || uJabatan.includes('gm') || uJabatan.includes('general manager')) {
-            if (isPendidikan) {
-                return uJabatan.includes('pendidikan') || uJabatan.includes('gmp');
-            } else {
-                return uJabatan.includes('operasional') || uJabatan.includes('gmo') || !uJabatan.includes('pendidikan');
-            }
-        }
-        return false;
-    });
+    let gmName = '( &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; )';
+    let gmNip = '';
+    let pengesahColTitle = 'GMO / GMP';
 
-    const gmName = gmUser ? gmUser.nama : '( &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; )';
-    const gmNip = gmUser ? gmUser.nip : '';
+    // Prioritaskan pengesah yang sudah tercatat di evaluasi_data / pengesahan_data jika sudah disahkan
+    if (pkk.pengesahanData && pkk.pengesahanData.pengesahNama) {
+        gmName = pkk.pengesahanData.pengesahNama;
+        gmNip = pkk.pengesahanData.pengesahNip || '';
+        pengesahColTitle = pkk.pengesahanData.pengesahJabatan || resolvedPengesah.headerTitle || 'GMO / GMP';
+    } else if (pkk.pengesahNama) {
+        gmName = pkk.pengesahNama;
+        gmNip = pkk.pengesahNip || '';
+        pengesahColTitle = pkk.pengesahJabatan || resolvedPengesah.headerTitle || 'GMO / GMP';
+    } else if (resolvedPengesah && resolvedPengesah.nama) {
+        gmName = resolvedPengesah.nama;
+        gmNip = resolvedPengesah.nip || '';
+        pengesahColTitle = resolvedPengesah.headerTitle || 'GMO / GMP';
+    }
 
     // Tanggal Pengesahan Otomatis
     let tglPengajuan = pkk.tglPengajuan || (pkk.evaluasiData && pkk.evaluasiData.tglPengajuan) || (pkk.createdAt ? pkk.createdAt.split('T')[0] : '') || (pkk.created_at ? pkk.created_at.split('T')[0] : '') || (pkk.status && pkk.status !== 'Draft' ? pkk.tanggal : '');
@@ -3584,6 +4683,8 @@ async function viewPKKPreview(nip) {
     if (!tglVerif2 && pkk.status === 'Selesai' && atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Name !== '-') {
         tglVerif2 = pkk.tanggal || (pkk.created_at ? pkk.created_at.split('T')[0] : '');
     }
+
+    let tglPengesahan = pkk.tglPengesahan || (pkk.evaluasiData && pkk.evaluasiData.tglPengesahan) || (pkk.pengesahanData && pkk.pengesahanData.tanggal) || '';
 
     const formatSigDate = (dateVal) => {
         if (!dateVal || dateVal === '-' || dateVal === '0') return 'Tgl. &nbsp;&nbsp;&nbsp;&nbsp; / &nbsp;&nbsp;&nbsp;&nbsp; /';
@@ -3821,7 +4922,7 @@ async function viewPKKPreview(nip) {
                         <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:25%;">Yang mengajukan</th>
                         <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:25%;">Penilai (Atasan 1)</th>
                         <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:25%;">Penilai (Atasan 2)</th>
-                        <th style="padding:8px 4px; width:25%;">GMO / GMP</th>
+                        <th style="padding:8px 4px; width:25%;">${pengesahColTitle}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -3847,7 +4948,7 @@ async function viewPKKPreview(nip) {
                         <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">${formatSigDate(tglPengajuan)}</td>
                         <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">${formatSigDate(tglVerif1)}</td>
                         <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">${(atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Name !== '-') ? formatSigDate(tglVerif2) : '-'}</td>
-                        <td style="padding:5px 4px;">Tgl. &nbsp;&nbsp;&nbsp;&nbsp; / &nbsp;&nbsp;&nbsp;&nbsp; /</td>
+                        <td style="padding:5px 4px;">${formatSigDate(tglPengesahan)}</td>
                     </tr>
                 </tbody>
             </table>
@@ -6880,3 +7981,728 @@ function setupCsvSkiModalEvents() {
         };
     }
 }
+
+// ==========================================
+// --- Page: Backup & Restore Data ---
+// ==========================================
+
+let _pendingRestoreJsonData = null;
+
+// Helper: Ambil semua data baris dari tabel Supabase dengan pagination aman (step 1000)
+async function fetchAllTableRowsFromSupabase(sb, tableName) {
+    let allRows = [];
+    let from = 0;
+    const step = 1000;
+    let hasMore = true;
+    while (hasMore) {
+        try {
+            const { data, error } = await sb.from(tableName).select('*').range(from, from + step - 1);
+            if (error) {
+                console.warn(`Fetch ${tableName} range ${from}-${from + step - 1}:`, error);
+                break;
+            }
+            if (data && data.length > 0) {
+                allRows = allRows.concat(data);
+                if (data.length < step) hasMore = false;
+                else from += step;
+            } else {
+                hasMore = false;
+            }
+        } catch (e) {
+            console.warn(`Exception fetching ${tableName}:`, e);
+            break;
+        }
+    }
+    return allRows;
+}
+
+// Helper: Ambil seluruh data database untuk 7 tabel
+async function fetchCompleteDatabaseSnapshot() {
+    const sb = getSupabaseClient();
+    const snapshot = {
+        users: [],
+        skis: [],
+        pkks: [],
+        bobot: [],
+        tahun_ajaran: [],
+        pengumuman: [],
+        setting_pengesahan: []
+    };
+
+    if (sb) {
+        try {
+            const [users, skis, pkks, bobot, ta, pengumuman, settings] = await Promise.all([
+                fetchAllTableRowsFromSupabase(sb, 'users'),
+                fetchAllTableRowsFromSupabase(sb, 'skis'),
+                fetchAllTableRowsFromSupabase(sb, 'pkks'),
+                fetchAllTableRowsFromSupabase(sb, 'bobot'),
+                fetchAllTableRowsFromSupabase(sb, 'tahun_ajaran'),
+                fetchAllTableRowsFromSupabase(sb, 'pengumuman'),
+                fetchAllTableRowsFromSupabase(sb, 'setting_pengesahan')
+            ]);
+            snapshot.users = users || [];
+            snapshot.skis = skis || [];
+            snapshot.pkks = pkks || [];
+            snapshot.bobot = bobot || [];
+            snapshot.tahun_ajaran = ta || [];
+            snapshot.pengumuman = pengumuman || [];
+            snapshot.setting_pengesahan = (settings && settings.length > 0)
+                ? settings
+                : (getLocalCache('pkk_setting_pengesahan_cache') || DEFAULT_SETTING_PENGESAHAN);
+        } catch (err) {
+            console.error("Gagal mengambil snapshot Supabase:", err);
+        }
+    }
+
+    // Fallbacks jika data kosong / offline
+    if (snapshot.users.length === 0 && MOCK_DB && MOCK_DB.users) snapshot.users = MOCK_DB.users;
+    if (snapshot.skis.length === 0 && MOCK_DB && MOCK_DB.skis) snapshot.skis = MOCK_DB.skis;
+    if (snapshot.pkks.length === 0 && MOCK_DB && MOCK_DB.pkks) snapshot.pkks = MOCK_DB.pkks;
+    if (snapshot.tahun_ajaran.length === 0) {
+        snapshot.tahun_ajaran = [
+            { id: 1, tahun: '2024/2025', status: 'Tidak Aktif' },
+            { id: 2, tahun: '2025/2026', status: 'Aktif' }
+        ];
+    }
+    if (snapshot.setting_pengesahan.length === 0) {
+        snapshot.setting_pengesahan = getLocalCache('pkk_setting_pengesahan_cache') || DEFAULT_SETTING_PENGESAHAN;
+    }
+    if (snapshot.bobot.length === 0) {
+        const cachedBobot = getLocalCache('pkk_bobot_matrix_cache') || DEFAULT_BOBOT_MATRIX;
+        snapshot.bobot = [{ id: 1, jabatan: 'setting_matrix', kpi: cachedBobot }];
+    }
+
+    return snapshot;
+}
+
+// Download file helper
+function triggerFileDownload(content, filename, mimeType = 'application/json') {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 150);
+}
+
+// Helper: Export database snapshot to multi-sheet Excel file (.xlsx)
+function exportDatabaseToExcel(snapshot) {
+    if (typeof XLSX === 'undefined') {
+        showToast("Pustaka XLSX belum termuat. Silakan muat ulang halaman.", "danger");
+        return;
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    // 1. Users Sheet
+    const usersRows = (snapshot.users || []).map(u => ({
+        "NIP": u.nip || '',
+        "Nama Lengkap": u.nama || '',
+        "Level": u.level || '',
+        "Jabatan": u.jabatan || '',
+        "Unit Kerja": u.unit || '',
+        "Atasan 1 (Verifikator 1)": u.atasan1 || '',
+        "Atasan 2 (Verifikator 2)": u.atasan2 || '',
+        "Password": u.password || ''
+    }));
+    const wsUsers = XLSX.utils.json_to_sheet(usersRows);
+    XLSX.utils.book_append_sheet(wb, wsUsers, "Users");
+
+    // 2. Master SKI Sheet
+    const skisRows = (snapshot.skis || []).map(s => ({
+        "ID": s.id || '',
+        "Target Unit": s.target_unit || s.targetUnit || '',
+        "Target Level": s.target_level || s.targetLevel || '',
+        "Target Jabatan": s.target_jabatan || s.targetJabatan || '',
+        "KPI Departemen": s.kpi_departemen || s.kpiDepartemen || '',
+        "SKI": s.ski || '',
+        "Target Detail": s.target_detail || s.targetDetail || '',
+        "Kriteria 1": s.kriteria1 || '',
+        "Kriteria 2": s.kriteria2 || '',
+        "Kriteria 3": s.kriteria3 || '',
+        "Kriteria 4": s.kriteria4 || '',
+        "Kriteria 5": s.kriteria5 || '',
+        "Bobot": s.bobot || 0
+    }));
+    const wsSkis = XLSX.utils.json_to_sheet(skisRows);
+    XLSX.utils.book_append_sheet(wb, wsSkis, "Master SKI");
+
+    // 3. Dokumen PKK Sheet
+    const pkksRows = (snapshot.pkks || []).map(p => {
+        const evalData = (typeof p.evaluasi_data === 'string' ? JSON.parse(p.evaluasi_data) : p.evaluasi_data) || {};
+        return {
+            "ID": p.id || '',
+            "NIP": p.nip || '',
+            "Nama": p.nama || '',
+            "Unit Kerja": p.unit || '',
+            "Tahun Ajaran": p.tahun_ajaran || p.tahunAjaran || '',
+            "Nilai Akhir": p.final_score !== undefined ? p.final_score : (p.finalScore || 0),
+            "Grade": p.final_grade || p.finalGrade || '-',
+            "Status Penilaian": p.status || '',
+            "Status Pengesahan": evalData.statusPengesahan || (evalData.tglPengesahan ? 'Disahkan' : 'Belum Disahkan'),
+            "Pejabat Pengesah": evalData.pengesahNama ? `${evalData.pengesahNama} (${evalData.pengesahJabatan || ''})` : '-',
+            "Tanggal Pengesahan": evalData.tglPengesahan || '-',
+            "Tanggal Pengajuan": p.tanggal || evalData.tglPengajuan || ''
+        };
+    });
+    const wsPkks = XLSX.utils.json_to_sheet(pkksRows);
+    XLSX.utils.book_append_sheet(wb, wsPkks, "Dokumen PKK");
+
+    // 4. Setting Bobot Sheet
+    let bobotMatrix = null;
+    if (Array.isArray(snapshot.bobot) && snapshot.bobot.length > 0) {
+        const matrixRow = snapshot.bobot.find(r => r.jabatan === 'setting_matrix') || snapshot.bobot[0];
+        if (matrixRow) {
+            if (Array.isArray(matrixRow.kpi)) {
+                bobotMatrix = matrixRow.kpi;
+            } else if (typeof matrixRow.kpi === 'string') {
+                try { bobotMatrix = JSON.parse(matrixRow.kpi); } catch (e) {}
+            }
+        }
+    }
+    if (!bobotMatrix || !Array.isArray(bobotMatrix) || bobotMatrix.length === 0) {
+        bobotMatrix = getLocalCache('pkk_bobot_matrix_cache') || DEFAULT_BOBOT_MATRIX;
+    }
+
+    if (Array.isArray(bobotMatrix) && bobotMatrix.length > 0) {
+        const headers = bobotMatrix[0];
+        const bobotRows = bobotMatrix.slice(1).map(row => {
+            const rowObj = {};
+            headers.forEach((h, idx) => {
+                let colName = h;
+                if (h === 'Category') colName = 'Kategori Bobot';
+                else if (h === 'Aspek') colName = 'Aspek Penilaian';
+                else if (h === 'TimLeader') colName = 'Tim Leader';
+                else if (h === 'staff') colName = 'Staff / Pelaksana';
+                rowObj[colName] = row[idx] !== undefined ? row[idx] : '';
+            });
+            return rowObj;
+        });
+        const wsBobot = XLSX.utils.json_to_sheet(bobotRows);
+        XLSX.utils.book_append_sheet(wb, wsBobot, "Setting Bobot");
+    }
+
+    // 5. Setting Pengesahan Sheet
+    const pengesahanRows = (snapshot.setting_pengesahan || []).map(s => ({
+        "Unit Kerja": s.unit || '',
+        "Kategori Pengesah": s.pengesah_level || s.pengesahLevel || '',
+        "NIP Pengesah": s.pengesah_nip || s.pengesahNip || '',
+        "Nama Pengesah": s.pengesah_nama || s.pengesahNama || '',
+        "Jabatan Pengesah": s.pengesah_jabatan || s.pengesahJabatan || ''
+    }));
+    const wsPengesahan = XLSX.utils.json_to_sheet(pengesahanRows);
+    XLSX.utils.book_append_sheet(wb, wsPengesahan, "Setting Pengesahan");
+
+    // 6. Tahun Ajaran Sheet
+    const taRows = (snapshot.tahun_ajaran || []).map(t => ({
+        "ID": t.id || '',
+        "Tahun Ajaran": t.tahun || '',
+        "Status": t.status || ''
+    }));
+    const wsTa = XLSX.utils.json_to_sheet(taRows);
+    XLSX.utils.book_append_sheet(wb, wsTa, "Tahun Ajaran");
+
+    // 7. Pengumuman Sheet
+    const pengumumanRows = (snapshot.pengumuman || []).map(p => ({
+        "ID": p.id || '',
+        "Judul": p.judul || '',
+        "Tanggal": p.tanggal || '',
+        "Deskripsi": p.deskripsi || ''
+    }));
+    const wsPengumuman = XLSX.utils.json_to_sheet(pengumumanRows);
+    XLSX.utils.book_append_sheet(wb, wsPengumuman, "Pengumuman");
+
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const filename = `PKK_Alsky_Database_${dateStr}.xlsx`;
+    XLSX.writeFile(wb, filename);
+}
+
+// Helper: Restore data to Supabase in safe batches
+async function executeDatabaseRestore(backupPayload, selectedTableKeys, onProgress) {
+    const sb = getSupabaseClient();
+    const rawData = backupPayload.data || backupPayload.tables || backupPayload;
+    const totalSteps = selectedTableKeys.length;
+    let currentStep = 0;
+
+    for (const tableKey of selectedTableKeys) {
+        currentStep++;
+        const percent = Math.round((currentStep / totalSteps) * 100);
+        const rows = rawData[tableKey];
+        if (!Array.isArray(rows) || rows.length === 0) {
+            if (onProgress) onProgress(tableKey, rows ? rows.length : 0, percent);
+            continue;
+        }
+
+        if (onProgress) onProgress(tableKey, rows.length, Math.max(5, percent - 5));
+
+        if (sb) {
+            try {
+                const BATCH_SIZE = 100;
+                for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+                    const chunk = rows.slice(i, i + BATCH_SIZE);
+                    let conflictTarget = undefined;
+                    if (tableKey === 'users') conflictTarget = 'nip';
+                    else if (tableKey === 'setting_pengesahan') conflictTarget = 'unit';
+                    else if (tableKey === 'bobot') conflictTarget = 'id';
+                    else conflictTarget = 'id';
+
+                    const options = conflictTarget ? { onConflict: conflictTarget } : undefined;
+                    const { error } = await sb.from(tableKey).upsert(chunk, options);
+                    if (error) {
+                        console.warn(`Upsert chunk error on ${tableKey}:`, error);
+                    }
+                }
+            } catch (err) {
+                console.error(`Restore error on table ${tableKey}:`, err);
+            }
+        }
+
+        // Sinkronisasi cache lokal
+        if (tableKey === 'setting_pengesahan') {
+            setLocalCache('pkk_setting_pengesahan_cache', rows);
+        } else if (tableKey === 'bobot') {
+            const matrixRow = rows.find(r => r.jabatan === 'setting_matrix');
+            if (matrixRow && matrixRow.kpi) {
+                let parsed = typeof matrixRow.kpi === 'string' ? JSON.parse(matrixRow.kpi) : matrixRow.kpi;
+                setLocalCache('pkk_bobot_matrix_cache', parsed);
+            }
+        } else if (tableKey === 'skis') {
+            _isSkisDataLoaded = false;
+        }
+
+        if (onProgress) onProgress(tableKey, rows.length, percent);
+        await new Promise(r => setTimeout(r, 120));
+    }
+}
+
+// Main page controller: initBackupData
+async function initBackupData() {
+    const elUsers = document.getElementById('stat-count-users');
+    const elSkis = document.getElementById('stat-count-skis');
+    const elPkks = document.getElementById('stat-count-pkks');
+    const elTa = document.getElementById('stat-count-ta');
+    const elPengumuman = document.getElementById('stat-count-pengumuman');
+    const elBobot = document.getElementById('stat-count-bobot');
+    const elPengesahan = document.getElementById('stat-count-pengesahan');
+
+    const selUsers = document.getElementById('sel-count-users');
+    const selSkis = document.getElementById('sel-count-skis');
+    const selPkks = document.getElementById('sel-count-pkks');
+
+    const badgeSource = document.getElementById('backup-db-source-badge');
+    const sb = getSupabaseClient();
+    if (badgeSource) {
+        badgeSource.innerHTML = sb ? '<i class="fas fa-check-circle"></i> Supabase Connected' : '<i class="fas fa-database"></i> Local Storage Mode';
+    }
+
+    let currentSnapshot = null;
+
+    async function loadStats() {
+        if (elUsers) elUsers.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        if (elSkis) elSkis.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        if (elPkks) elPkks.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        currentSnapshot = await fetchCompleteDatabaseSnapshot();
+
+        if (elUsers) elUsers.innerText = currentSnapshot.users.length;
+        if (elSkis) elSkis.innerText = currentSnapshot.skis.length;
+        if (elPkks) elPkks.innerText = currentSnapshot.pkks.length;
+        if (elTa) elTa.innerText = currentSnapshot.tahun_ajaran.length;
+        if (elPengumuman) elPengumuman.innerText = currentSnapshot.pengumuman.filter(p => !p.judul || !String(p.judul).startsWith('__CONFIG_')).length;
+        if (elBobot) elBobot.innerText = 'Tersedia';
+        if (elPengesahan) elPengesahan.innerText = currentSnapshot.setting_pengesahan.length;
+
+        if (selUsers) selUsers.innerText = currentSnapshot.users.length;
+        if (selSkis) selSkis.innerText = currentSnapshot.skis.length;
+        if (selPkks) selPkks.innerText = currentSnapshot.pkks.length;
+    }
+
+    await loadStats();
+
+    // Check Local Snapshot existence
+    function updateLocalSnapshotUI() {
+        const snapRaw = localStorage.getItem('pkk_quick_snapshot');
+        const snapInfo = document.getElementById('local-snapshot-info');
+        const btnRestoreSnap = document.getElementById('btn-restore-local-snapshot');
+        if (snapRaw && snapInfo && btnRestoreSnap) {
+            try {
+                const parsed = JSON.parse(snapRaw);
+                const d = parsed.metadata && parsed.metadata.backupDateFormatted ? parsed.metadata.backupDateFormatted : 'Tersimpan';
+                snapInfo.innerHTML = `<span class="text-success font-weight-bold"><i class="fas fa-check-circle"></i> Snapshot ada:</span> ${d}`;
+                btnRestoreSnap.style.display = 'inline-block';
+            } catch (e) {
+                snapInfo.innerText = 'Snapshot rusak.';
+                btnRestoreSnap.style.display = 'none';
+            }
+        }
+    }
+    updateLocalSnapshotUI();
+
+    // Refresh Button
+    const btnRefresh = document.getElementById('btn-refresh-backup-stats');
+    if (btnRefresh) {
+        btnRefresh.onclick = async () => {
+            showToast("Memperbarui status database...", "info");
+            await loadStats();
+            showToast("Data status berhasil diperbarui!", "success");
+        };
+    }
+
+    // Download Full JSON Button
+    const btnFullJson = document.getElementById('btn-export-full-json');
+    if (btnFullJson) {
+        btnFullJson.onclick = async () => {
+            const originalHtml = btnFullJson.innerHTML;
+            btnFullJson.disabled = true;
+            btnFullJson.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Mengunduh Database...';
+
+            try {
+                const snapshot = await fetchCompleteDatabaseSnapshot();
+                const now = new Date();
+                const pad = n => String(n).padStart(2, '0');
+                const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+
+                const fullPayload = {
+                    metadata: {
+                        appName: "Aplikasi PKK Al-Syukro (Alsky)",
+                        version: "2.5",
+                        backupDate: now.toISOString(),
+                        backupDateFormatted: now.toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'medium' }),
+                        createdBy: currentUser ? `${currentUser.nama} (${currentUser.nip})` : 'Super Admin',
+                        tableCounts: {
+                            users: snapshot.users.length,
+                            skis: snapshot.skis.length,
+                            pkks: snapshot.pkks.length,
+                            bobot: snapshot.bobot.length,
+                            tahun_ajaran: snapshot.tahun_ajaran.length,
+                            pengumuman: snapshot.pengumuman.length,
+                            setting_pengesahan: snapshot.setting_pengesahan.length
+                        }
+                    },
+                    data: snapshot
+                };
+
+                const filename = `PKK_Alsky_Full_Backup_${dateStr}.json`;
+                triggerFileDownload(JSON.stringify(fullPayload, null, 2), filename, 'application/json');
+                showToast(`🎉 Full Backup (${filename}) berhasil diunduh!`, "success");
+            } catch (err) {
+                console.error("Backup JSON error:", err);
+                showToast("Gagal mengunduh backup JSON: " + err.message, "danger");
+            } finally {
+                btnFullJson.disabled = false;
+                btnFullJson.innerHTML = originalHtml;
+            }
+        };
+    }
+
+    // Export Full Excel Button
+    const btnFullExcel = document.getElementById('btn-export-full-excel');
+    if (btnFullExcel) {
+        btnFullExcel.onclick = async () => {
+            const originalHtml = btnFullExcel.innerHTML;
+            btnFullExcel.disabled = true;
+            btnFullExcel.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Membuat File Excel...';
+
+            try {
+                const snapshot = await fetchCompleteDatabaseSnapshot();
+                exportDatabaseToExcel(snapshot);
+                showToast("🎉 Database berhasil diexport ke Excel (*.xlsx)!", "success");
+            } catch (err) {
+                console.error("Backup Excel error:", err);
+                showToast("Gagal mengexport file Excel: " + err.message, "danger");
+            } finally {
+                btnFullExcel.disabled = false;
+                btnFullExcel.innerHTML = originalHtml;
+            }
+        };
+    }
+
+    // Toggle Select All Checkbox
+    const btnSelectAll = document.getElementById('btn-select-all-backup');
+    if (btnSelectAll) {
+        let allChecked = true;
+        btnSelectAll.onclick = () => {
+            allChecked = !allChecked;
+            document.querySelectorAll('.checkbox-table-backup').forEach(cb => cb.checked = allChecked);
+            btnSelectAll.innerText = allChecked ? 'Batal Pilih Semua' : 'Pilih Semua';
+        };
+    }
+
+    // Download Selective Backup Button
+    const btnSelectiveJson = document.getElementById('btn-export-selective-json');
+    if (btnSelectiveJson) {
+        btnSelectiveJson.onclick = async () => {
+            const checkedBoxes = Array.from(document.querySelectorAll('.checkbox-table-backup:checked'));
+            if (checkedBoxes.length === 0) {
+                showToast("Pilih minimal satu tabel untuk dicadangkan!", "warning");
+                return;
+            }
+
+            const selectedKeys = checkedBoxes.map(cb => cb.value);
+            const snapshot = await fetchCompleteDatabaseSnapshot();
+            const filteredData = {};
+            selectedKeys.forEach(k => {
+                filteredData[k] = snapshot[k] || [];
+            });
+
+            const now = new Date();
+            const dateStr = now.toISOString().slice(0, 10);
+            const payload = {
+                metadata: {
+                    appName: "Aplikasi PKK Al-Syukro (Alsky)",
+                    backupType: "Selective",
+                    backupDate: now.toISOString(),
+                    backupDateFormatted: now.toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'medium' }),
+                    selectedTables: selectedKeys
+                },
+                data: filteredData
+            };
+
+            const filename = `PKK_Alsky_Selective_Backup_${dateStr}.json`;
+            triggerFileDownload(JSON.stringify(payload, null, 2), filename, 'application/json');
+            showToast(`🎉 Backup ${selectedKeys.length} tabel terpilih berhasil diunduh!`, "success");
+        };
+    }
+
+    // Quick Local Snapshot Button
+    const btnQuickSnap = document.getElementById('btn-quick-snapshot');
+    const btnCreateSnap = document.getElementById('btn-create-local-snapshot');
+    const triggerSnapshot = async () => {
+        showToast("Membuat snapshot lokal...", "info");
+        try {
+            const snapshot = await fetchCompleteDatabaseSnapshot();
+            const now = new Date();
+            const payload = {
+                metadata: {
+                    appName: "Aplikasi PKK Al-Syukro (Alsky)",
+                    type: "Local Quick Snapshot",
+                    backupDate: now.toISOString(),
+                    backupDateFormatted: now.toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'medium' }),
+                    createdBy: currentUser ? currentUser.nama : 'Admin'
+                },
+                data: snapshot
+            };
+            localStorage.setItem('pkk_quick_snapshot', JSON.stringify(payload));
+            updateLocalSnapshotUI();
+            showToast("🎉 Snapshot lokal berhasil disimpan di browser!", "success");
+        } catch (e) {
+            showToast("Gagal menyimpan snapshot: " + e.message, "danger");
+        }
+    };
+    if (btnQuickSnap) btnQuickSnap.onclick = triggerSnapshot;
+    if (btnCreateSnap) btnCreateSnap.onclick = triggerSnapshot;
+
+    // Restore from Local Snapshot
+    const btnRestoreSnap = document.getElementById('btn-restore-local-snapshot');
+    if (btnRestoreSnap) {
+        btnRestoreSnap.onclick = () => {
+            const snapRaw = localStorage.getItem('pkk_quick_snapshot');
+            if (!snapRaw) return showToast("Tidak ada snapshot lokal.", "warning");
+            try {
+                const parsed = JSON.parse(snapRaw);
+                displayRestorePreview(parsed, "Snapshot Lokal Browser");
+            } catch (e) {
+                showToast("File snapshot tidak valid", "danger");
+            }
+        };
+    }
+
+    // Restore File Dropzone & File Input Handling
+    const dropzone = document.getElementById('restore-dropzone');
+    const fileInput = document.getElementById('input-file-restore');
+
+    if (dropzone && fileInput) {
+        dropzone.onclick = () => fileInput.click();
+
+        dropzone.ondragover = e => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        };
+        dropzone.ondragleave = () => dropzone.classList.remove('dragover');
+        dropzone.ondrop = e => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                handleRestoreFileSelected(e.dataTransfer.files[0]);
+            }
+        };
+
+        fileInput.onchange = e => {
+            if (e.target.files && e.target.files.length > 0) {
+                handleRestoreFileSelected(e.target.files[0]);
+            }
+        };
+    }
+
+    function handleRestoreFileSelected(file) {
+        if (!file.name.endsWith('.json')) {
+            showToast("Harap pilih file dengan ekstensi .json!", "warning");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = ev => {
+            try {
+                const parsed = JSON.parse(ev.target.result);
+                displayRestorePreview(parsed, file.name);
+            } catch (err) {
+                showToast("Format file JSON tidak valid: " + err.message, "danger");
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function displayRestorePreview(parsedData, sourceName) {
+        const rawData = parsedData.data || parsedData.tables || parsedData;
+        const availableTables = ['users', 'skis', 'pkks', 'bobot', 'tahun_ajaran', 'pengumuman', 'setting_pengesahan'];
+        const foundTables = availableTables.filter(t => Array.isArray(rawData[t]) && rawData[t].length > 0);
+
+        if (foundTables.length === 0) {
+            showToast("File JSON ini tidak memuat tabel database PKK yang valid!", "warning");
+            return;
+        }
+
+        _pendingRestoreJsonData = {
+            sourceName: sourceName,
+            payload: parsedData,
+            tables: foundTables
+        };
+
+        const previewContainer = document.getElementById('restore-preview-container');
+        const filenameEl = document.getElementById('restore-preview-filename');
+        const metaEl = document.getElementById('restore-preview-meta');
+        const listEl = document.getElementById('restore-preview-tables-list');
+
+        if (previewContainer && filenameEl && metaEl && listEl) {
+            filenameEl.innerText = sourceName;
+            const metaDate = parsedData.metadata && parsedData.metadata.backupDateFormatted ? parsedData.metadata.backupDateFormatted : 'Waktu cadangan tidak tercantum';
+            metaEl.innerText = `Tanggal: ${metaDate}`;
+
+            listEl.innerHTML = foundTables.map(t => {
+                const count = rawData[t].length;
+                let title = t;
+                if (t === 'users') title = 'Users / Akun';
+                if (t === 'skis') title = 'Master SKI';
+                if (t === 'pkks') title = 'Dokumen PKK';
+                if (t === 'bobot') title = 'Setting Bobot';
+                if (t === 'tahun_ajaran') title = 'Tahun Ajaran';
+                if (t === 'pengumuman') title = 'Pengumuman';
+                if (t === 'setting_pengesahan') title = 'Setting Pengesahan';
+
+                return `
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                        <input type="checkbox" value="${t}" checked class="cb-restore-table">
+                        <span>${title} (<strong>${count}</strong>)</span>
+                    </label>
+                `;
+            }).join('');
+
+            previewContainer.style.display = 'block';
+            showToast("File cadangan berhasil dibaca. Silakan periksa daftar tabel di bawah.", "info");
+        }
+    }
+
+    // Cancel Restore File
+    const btnCancelRestore = document.getElementById('btn-cancel-restore-file');
+    if (btnCancelRestore) {
+        btnCancelRestore.onclick = () => {
+            _pendingRestoreJsonData = null;
+            const previewContainer = document.getElementById('restore-preview-container');
+            if (previewContainer) previewContainer.style.display = 'none';
+            if (fileInput) fileInput.value = '';
+        };
+    }
+
+    // Open Confirmation Modal
+    const btnStartRestore = document.getElementById('btn-start-restore');
+    const modalConfirm = document.getElementById('modal-confirm-restore');
+    const btnBatalModalRestore = document.getElementById('btn-batal-modal-restore');
+    const btnExecuteRestore = document.getElementById('btn-execute-restore');
+
+    if (btnStartRestore && modalConfirm) {
+        btnStartRestore.onclick = () => {
+            if (!_pendingRestoreJsonData) return;
+            const selectedCheckboxes = Array.from(document.querySelectorAll('.cb-restore-table:checked'));
+            if (selectedCheckboxes.length === 0) {
+                return showToast("Pilih minimal satu tabel yang ingin dipulihkan!", "warning");
+            }
+
+            const fileTitleEl = document.getElementById('modal-restore-file-title');
+            const summaryBadges = document.getElementById('modal-restore-summary-badges');
+
+            if (fileTitleEl) fileTitleEl.innerText = _pendingRestoreJsonData.sourceName;
+            if (summaryBadges) {
+                const rawData = _pendingRestoreJsonData.payload.data || _pendingRestoreJsonData.payload.tables || _pendingRestoreJsonData.payload;
+                summaryBadges.innerHTML = selectedCheckboxes.map(cb => {
+                    const count = (rawData[cb.value] || []).length;
+                    return `<span class="badge badge-secondary mr-2 mb-1" style="display:inline-block; padding:4px 8px; background:#e2e8f0; color:#334155; border-radius:4px;"><strong>${cb.value}</strong>: ${count} baris</span>`;
+                }).join('');
+            }
+
+            modalConfirm.style.display = 'flex';
+        };
+    }
+
+    if (btnBatalModalRestore && modalConfirm) {
+        btnBatalModalRestore.onclick = () => {
+            modalConfirm.style.display = 'none';
+        };
+    }
+
+    // Execute Restore Logic with Progress Bar
+    if (btnExecuteRestore && modalConfirm) {
+        btnExecuteRestore.onclick = async () => {
+            modalConfirm.style.display = 'none';
+            if (!_pendingRestoreJsonData) return;
+
+            const selectedTables = Array.from(document.querySelectorAll('.cb-restore-table:checked')).map(cb => cb.value);
+            const modalProgress = document.getElementById('modal-progress-restore');
+            const progressStatus = document.getElementById('restore-progress-status');
+            const progressBar = document.getElementById('restore-progress-bar');
+            const progressPercent = document.getElementById('restore-progress-percent');
+
+            if (modalProgress) modalProgress.style.display = 'flex';
+
+            try {
+                await executeDatabaseRestore(
+                    _pendingRestoreJsonData.payload,
+                    selectedTables,
+                    (tableKey, count, percent) => {
+                        if (progressStatus) progressStatus.innerText = `Memulihkan tabel "${tableKey}" (${count} data)...`;
+                        if (progressBar) progressBar.style.width = `${percent}%`;
+                        if (progressPercent) progressPercent.innerText = `${percent}%`;
+                    }
+                );
+
+                if (progressBar) progressBar.style.width = '100%';
+                if (progressPercent) progressPercent.innerText = '100%';
+                if (progressStatus) progressStatus.innerText = 'Pemulihan selesai!';
+
+                await new Promise(r => setTimeout(r, 400));
+                if (modalProgress) modalProgress.style.display = 'none';
+
+                showToast(`🎉 Sukses! ${selectedTables.length} tabel berhasil dipulihkan ke database.`, "success");
+
+                // Reset preview
+                _pendingRestoreJsonData = null;
+                const previewContainer = document.getElementById('restore-preview-container');
+                if (previewContainer) previewContainer.style.display = 'none';
+                if (fileInput) fileInput.value = '';
+
+                // Reload stats
+                await loadStats();
+            } catch (err) {
+                console.error("Execute restore error:", err);
+                if (modalProgress) modalProgress.style.display = 'none';
+                showToast("Terjadi kesalahan saat memulihkan database: " + err.message, "danger");
+            }
+        };
+    }
+}
+

@@ -710,6 +710,125 @@
         </div>
     </template>
 
+    <template id="tpl-pengesahan">
+        <div class="page page-pengesahan fade-in">
+            <!-- Header Section -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+                <div>
+                    <h3 class="gradient-text" style="font-size:1.5rem; margin-bottom:4px;">
+                        <i class="fas fa-stamp"></i> Pengesahan Dokumen PKK
+                    </h3>
+                    <p style="color:#64748b; font-size:0.88rem; margin:0;">
+                        Validasi dan pengesahan resmi PKK yang telah selesai dinilai oleh atasan langsung.
+                    </p>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button id="btn-batch-sahkan-pkk" class="btn-stamp-action" style="display:none;">
+                        <i class="fas fa-check-double"></i> Sahkan Terpilih (<span id="count-selected-pkk">0</span>)
+                    </button>
+                    <button id="btn-refresh-pengesahan" class="btn-secondary" style="padding:7px 14px; font-size:0.85rem;">
+                        <i class="fas fa-sync-alt"></i> Refresh Data
+                    </button>
+                </div>
+            </div>
+
+            <!-- Metric Cards -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:24px;">
+                <div class="pengesahan-stat-card">
+                    <div class="pengesahan-stat-icon" style="background:#eff6ff; color:#2563eb;">
+                        <i class="fas fa-clipboard-check"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.78rem; text-transform:uppercase; color:#64748b; font-weight:700; letter-spacing:0.5px;">Selesai Dinilai Atasan</div>
+                        <div style="font-size:1.6rem; font-weight:800; color:#1e293b;" id="stat-pengesahan-total">0</div>
+                    </div>
+                </div>
+                <div class="pengesahan-stat-card">
+                    <div class="pengesahan-stat-icon" style="background:#fff7ed; color:#ea580c;">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.78rem; text-transform:uppercase; color:#ea580c; font-weight:700; letter-spacing:0.5px;">Menunggu Pengesahan</div>
+                        <div style="font-size:1.6rem; font-weight:800; color:#c2410c;" id="stat-pengesahan-pending">0</div>
+                    </div>
+                </div>
+                <div class="pengesahan-stat-card">
+                    <div class="pengesahan-stat-icon" style="background:#f0fdf4; color:#16a34a;">
+                        <i class="fas fa-stamp"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:0.78rem; text-transform:uppercase; color:#16a34a; font-weight:700; letter-spacing:0.5px;">Sudah Disahkan</div>
+                        <div style="font-size:1.6rem; font-weight:800; color:#15803d;" id="stat-pengesahan-approved">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card Konten Utama -->
+            <div class="card glass-card">
+                <div class="card-header" style="border-bottom:1px solid #e2e8f0; padding:16px 20px;">
+                    <!-- Filter Tabs & Controls -->
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+                        <!-- Tabs -->
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" class="nav-tab-pengesahan active" data-tab="pending" id="tab-pengesahan-pending">
+                                <i class="fas fa-hourglass-half"></i> Belum Disahkan <span class="badge" style="background:#ea580c; color:white; font-size:0.7rem; padding:2px 6px; border-radius:10px;" id="badge-tab-pending">0</span>
+                            </button>
+                            <button type="button" class="nav-tab-pengesahan" data-tab="approved" id="tab-pengesahan-approved">
+                                <i class="fas fa-check-circle"></i> Sudah Disahkan <span class="badge" style="background:#16a34a; color:white; font-size:0.7rem; padding:2px 6px; border-radius:10px;" id="badge-tab-approved">0</span>
+                            </button>
+                            <button type="button" class="nav-tab-pengesahan" data-tab="all" id="tab-pengesahan-all">
+                                <i class="fas fa-list"></i> Semua
+                            </button>
+                        </div>
+
+                        <!-- Search & Filters -->
+                        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                            <select id="filter-pengesahan-unit" class="form-control" style="font-size:0.85rem; padding:7px 12px; min-width:140px;">
+                                <option value="">-- Semua Unit --</option>
+                            </select>
+                            <select id="filter-pengesahan-ta" class="form-control" style="font-size:0.85rem; padding:7px 12px; min-width:130px;">
+                                <option value="">Semua TA</option>
+                            </select>
+                            <div style="position:relative;">
+                                <input type="text" id="search-pengesahan-text" class="form-control" placeholder="Cari nama / NIP..." style="font-size:0.85rem; padding:7px 12px 7px 32px; width:200px;">
+                                <i class="fas fa-search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:0.82rem;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body" style="padding:0;">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" style="margin:0;">
+                            <thead style="background:#f8fafc; color:#475569; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.5px;">
+                                <tr>
+                                    <th style="width:40px; text-align:center;">
+                                        <input type="checkbox" id="check-all-pengesahan" style="cursor:pointer; width:16px; height:16px;">
+                                    </th>
+                                    <th style="width:40px; text-align:center;">No.</th>
+                                    <th>Karyawan</th>
+                                    <th>Unit &amp; Jabatan</th>
+                                    <th style="text-align:center;">Nilai Akhir</th>
+                                    <th style="text-align:center;">Tgl Dinilai</th>
+                                    <th style="text-align:center;">Pejabat Pengesah</th>
+                                    <th style="text-align:center;">Status</th>
+                                    <th style="text-align:center; min-width:140px;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-pengesahan">
+                                <tr>
+                                    <td colspan="9" style="text-align:center; padding:30px; color:#64748b;">
+                                        <i class="fas fa-spinner fa-spin"></i> Memuat data PKK untuk pengesahan...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
     <template id="tpl-riwayat">
         <div class="page page-riwayat fade-in">
             <div class="card glass-card">
@@ -983,6 +1102,74 @@
         </div>
     </template>
 
+    <template id="tpl-setting_pengesahan">
+        <div class="page page-setting-pengesahan fade-in">
+            <!-- Header -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+                <div>
+                    <h3 class="gradient-text" style="font-size:1.5rem; margin-bottom:4px;">
+                        <i class="fas fa-user-check"></i> Setting Pengesahan Dokumen PKK
+                    </h3>
+                    <p style="color:#64748b; font-size:0.88rem; margin:0;">
+                        Tentukan pejabat pengesah (GMP, GMO, Direktur, atau Pejabat lain) untuk setiap unit kerja secara fleksibel.
+                    </p>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button type="button" id="btn-reset-default-setting-pengesahan" class="btn-secondary" style="padding:8px 14px; font-size:0.85rem;">
+                        <i class="fas fa-undo"></i> Terapkan Standar Default
+                    </button>
+                    <button type="button" id="btn-tambah-unit-pengesahan" class="btn-secondary" style="padding:8px 14px; font-size:0.85rem;">
+                        <i class="fas fa-plus"></i> Tambah Unit Custom
+                    </button>
+                    <button type="button" id="btn-save-setting-pengesahan" class="btn-primary" style="padding:8px 18px; font-size:0.85rem;">
+                        <i class="fas fa-save"></i> Simpan Pengaturan
+                    </button>
+                </div>
+            </div>
+
+            <!-- Petunjuk Info Card -->
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:14px 18px; margin-bottom:20px; font-size:0.85rem; color:#1e40af; display:flex; gap:12px; align-items:flex-start;">
+                <i class="fas fa-info-circle" style="font-size:1.2rem; margin-top:2px;"></i>
+                <div>
+                    <strong>Konfigurasi Pengesahan Otomatis:</strong>
+                    <ul style="margin:4px 0 0 16px; padding:0; line-height:1.5;">
+                        <li>Unit <strong>TK, SD, SMP, SMA</strong> disahkan oleh <strong>GMP (General Manager Pendidikan)</strong>.</li>
+                        <li>Unit <strong>QMS / QRD, Marketing &amp; Komunikasi (Markom)</strong> disahkan oleh <strong>Direktur</strong>.</li>
+                        <li>Unit <strong>HRD, GA, FA</strong> disahkan oleh <strong>GMO (General Manager Operasional)</strong>.</li>
+                        <li>Anda dapat mengubah siapa pejabat pengesah atau menambah unit kerja baru kapan saja sesuai kebutuhan organisasi.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Main Table Card -->
+            <div class="card glass-card">
+                <div class="card-body" style="padding:0;">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" id="table-setting-pengesahan" style="margin:0;">
+                            <thead style="background:#f8fafc; color:#475569; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.5px;">
+                                <tr>
+                                    <th style="width:40px; text-align:center;">No.</th>
+                                    <th style="min-width:180px;">Unit Kerja</th>
+                                    <th style="min-width:200px;">Kategori Pengesah</th>
+                                    <th style="min-width:280px;">Pejabat Pengesah Terpilih</th>
+                                    <th style="min-width:160px; text-align:center;">Preview Tanda Tangan</th>
+                                    <th style="width:80px; text-align:center;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-setting-pengesahan">
+                                <tr>
+                                    <td colspan="6" style="text-align:center; padding:30px; color:#64748b;">
+                                        <i class="fas fa-spinner fa-spin"></i> Memuat data pengaturan pengesahan...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
     <template id="tpl-tahun_ajaran">
         <div class="page page-tahun-ajaran fade-in">
             <div class="card glass-card mb-4">
@@ -1102,6 +1289,264 @@
 
                     <!-- Pagination -->
                     <div id="user-pagination-container" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:16px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:0.85rem; color:#64748b;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="tpl-backup_data">
+        <div class="page page-backup-data fade-in">
+            <!-- Header -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+                <div>
+                    <h3 class="gradient-text" style="font-size:1.5rem; margin-bottom:4px;">
+                        <i class="fas fa-database"></i> Backup &amp; Restore Database PKK
+                    </h3>
+                    <p style="color:#64748b; font-size:0.88rem; margin:0;">
+                        Cadangkan seluruh data sistem penilaian kinerja ke file JSON / Excel, dan pulihkan data kapan saja dengan aman.
+                    </p>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button type="button" id="btn-refresh-backup-stats" class="btn-secondary" style="padding:8px 14px; font-size:0.85rem;">
+                        <i class="fas fa-sync-alt"></i> Refresh Data
+                    </button>
+                    <button type="button" id="btn-quick-snapshot" class="btn-secondary" style="padding:8px 14px; font-size:0.85rem;" title="Simpan snapshot cadangan instan ke penyimpanan browser">
+                        <i class="fas fa-camera"></i> Snapshot Lokal
+                    </button>
+                </div>
+            </div>
+
+            <!-- Database Stats Badges Card -->
+            <div class="card glass-card mb-4" style="border-radius:14px; border:1px solid #e2e8f0; background:linear-gradient(180deg, #ffffff, #f8fafc);">
+                <div class="card-body" style="padding:18px 20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+                        <h5 style="margin:0; font-size:0.95rem; font-weight:700; color:#1e293b; display:flex; align-items:center; gap:8px;">
+                            <i class="fas fa-server text-primary"></i> Ringkasan Rekaman Data Saat Ini (Live Database)
+                        </h5>
+                        <span id="backup-db-source-badge" class="badge" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; font-size:0.75rem; padding:4px 8px; border-radius:6px;">
+                            <i class="fas fa-check-circle"></i> Supabase Connected
+                        </span>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:12px;" id="backup-stats-container">
+                        <div class="backup-stat-card">
+                            <div class="backup-stat-icon" style="background:#e0f2fe; color:#0284c7;"><i class="fas fa-users"></i></div>
+                            <div>
+                                <div class="backup-stat-num" id="stat-count-users">-</div>
+                                <div class="backup-stat-label">Users / Akun</div>
+                            </div>
+                        </div>
+                        <div class="backup-stat-card">
+                            <div class="backup-stat-icon" style="background:#fef3c7; color:#d97706;"><i class="fas fa-list-alt"></i></div>
+                            <div>
+                                <div class="backup-stat-num" id="stat-count-skis">-</div>
+                                <div class="backup-stat-label">Master SKI</div>
+                            </div>
+                        </div>
+                        <div class="backup-stat-card">
+                            <div class="backup-stat-icon" style="background:#dcfce7; color:#16a34a;"><i class="fas fa-file-signature"></i></div>
+                            <div>
+                                <div class="backup-stat-num" id="stat-count-pkks">-</div>
+                                <div class="backup-stat-label">Dokumen PKK</div>
+                            </div>
+                        </div>
+                        <div class="backup-stat-card">
+                            <div class="backup-stat-icon" style="background:#f3e8ff; color:#9333ea;"><i class="fas fa-calendar-alt"></i></div>
+                            <div>
+                                <div class="backup-stat-num" id="stat-count-ta">-</div>
+                                <div class="backup-stat-label">Tahun Ajaran</div>
+                            </div>
+                        </div>
+                        <div class="backup-stat-card">
+                            <div class="backup-stat-icon" style="background:#fee2e2; color:#dc2626;"><i class="fas fa-bullhorn"></i></div>
+                            <div>
+                                <div class="backup-stat-num" id="stat-count-pengumuman">-</div>
+                                <div class="backup-stat-label">Pengumuman</div>
+                            </div>
+                        </div>
+                        <div class="backup-stat-card">
+                            <div class="backup-stat-icon" style="background:#ede9fe; color:#6366f1;"><i class="fas fa-sliders-h"></i></div>
+                            <div>
+                                <div class="backup-stat-num" id="stat-count-bobot">-</div>
+                                <div class="backup-stat-label">Setting Bobot</div>
+                            </div>
+                        </div>
+                        <div class="backup-stat-card">
+                            <div class="backup-stat-icon" style="background:#ccfbf1; color:#0d9488;"><i class="fas fa-stamp"></i></div>
+                            <div>
+                                <div class="backup-stat-num" id="stat-count-pengesahan">-</div>
+                                <div class="backup-stat-label">Pengesah Unit</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grid 2 Kolom: Kiri = Download Backup, Kanan = Restore Data -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:20px;">
+                <!-- KOLOM 1: EXPORT / DOWNLOAD CADANGAN -->
+                <div style="display:flex; flex-direction:column; gap:20px;">
+                    <!-- Card Full Backup -->
+                    <div class="card glass-card" style="border-radius:14px; border:1px solid #e2e8f0;">
+                        <div class="card-body" style="padding:22px;">
+                            <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                                <div style="width:38px; height:38px; border-radius:10px; background:linear-gradient(135deg, #036F3E, #024D2B); color:#fff; display:flex; align-items:center; justify-content:center; font-size:1.1rem;">
+                                    <i class="fas fa-download"></i>
+                                </div>
+                                <div>
+                                    <h4 style="margin:0; font-size:1.1rem; color:#1e293b; font-weight:700;">1. Backup Penuh (Semua Data)</h4>
+                                    <span style="font-size:0.78rem; color:#64748b;">Unduh seluruh 7 tabel database dalam satu klik</span>
+                                </div>
+                            </div>
+
+                            <p style="font-size:0.85rem; color:#475569; line-height:1.5; margin-bottom:18px;">
+                                Cadangkan seluruh data akun pengguna, Master SKI, dokumen penilaian PKK, bobot kriteria, tahun ajaran, dan konfigurasi pengesahan.
+                            </p>
+
+                            <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+                                <button type="button" id="btn-export-full-json" class="btn-primary" style="padding:12px 18px; font-size:0.92rem; font-weight:700; display:flex; align-items:center; justify-content:center; gap:10px; border-radius:10px; box-shadow:0 4px 14px rgba(3,111,62,0.25);">
+                                    <i class="fas fa-file-code" style="font-size:1.1rem;"></i>
+                                    <span>Download Full Backup JSON (*.json)</span>
+                                </button>
+                                <button type="button" id="btn-export-full-excel" class="btn-secondary" style="padding:11px 18px; font-size:0.88rem; font-weight:700; display:flex; align-items:center; justify-content:center; gap:10px; border-radius:10px; background:#047857; color:#fff; border-color:#047857;">
+                                    <i class="fas fa-file-excel" style="font-size:1.1rem;"></i>
+                                    <span>Export Semua Tabel ke Excel (*.xlsx)</span>
+                                </button>
+                            </div>
+
+                            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px 14px; font-size:0.78rem; color:#1e40af; line-height:1.4;">
+                                <i class="fas fa-info-circle mr-1"></i> <strong>Rekomendasi:</strong> Gunakan file <code>.json</code> untuk kebutuhan Restore/Pemulihan data, dan file <code>.xlsx</code> untuk arsip atau analisis di Microsoft Excel.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card Selective Backup -->
+                    <div class="card glass-card" style="border-radius:14px; border:1px solid #e2e8f0;">
+                        <div class="card-body" style="padding:22px;">
+                            <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                                <div style="width:38px; height:38px; border-radius:10px; background:#f1f5f9; color:#0f766e; display:flex; align-items:center; justify-content:center; font-size:1.1rem;">
+                                    <i class="fas fa-filter"></i>
+                                </div>
+                                <div>
+                                    <h4 style="margin:0; font-size:1.05rem; color:#1e293b; font-weight:700;">Backup Selektif (Pilih Tabel)</h4>
+                                    <span style="font-size:0.78rem; color:#64748b;">Pilih tabel tertentu yang ingin dicadangkan</span>
+                                </div>
+                            </div>
+
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px;" id="selective-tables-checkboxes">
+                                <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; cursor:pointer;">
+                                    <input type="checkbox" value="users" checked class="checkbox-table-backup"> Users (<span id="sel-count-users">0</span>)
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; cursor:pointer;">
+                                    <input type="checkbox" value="skis" checked class="checkbox-table-backup"> Master SKI (<span id="sel-count-skis">0</span>)
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; cursor:pointer;">
+                                    <input type="checkbox" value="pkks" checked class="checkbox-table-backup"> Dokumen PKK (<span id="sel-count-pkks">0</span>)
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; cursor:pointer;">
+                                    <input type="checkbox" value="bobot" checked class="checkbox-table-backup"> Setting Bobot
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; cursor:pointer;">
+                                    <input type="checkbox" value="tahun_ajaran" checked class="checkbox-table-backup"> Tahun Ajaran
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; cursor:pointer;">
+                                    <input type="checkbox" value="pengumuman" checked class="checkbox-table-backup"> Pengumuman
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; cursor:pointer;">
+                                    <input type="checkbox" value="setting_pengesahan" checked class="checkbox-table-backup"> Setting Pengesahan
+                                </label>
+                            </div>
+
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <button type="button" id="btn-export-selective-json" class="btn-secondary" style="flex:1; padding:9px 12px; font-size:0.82rem; font-weight:600;">
+                                    <i class="fas fa-download mr-1"></i> Download Terpilih (.json)
+                                </button>
+                                <button type="button" id="btn-select-all-backup" class="btn-outline" style="padding:9px 12px; font-size:0.8rem; background:transparent; border:1px solid #cbd5e1; border-radius:8px; cursor:pointer;">
+                                    Pilih Semua
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KOLOM 2: RESTORE / PEMULIHAN CADANGAN -->
+                <div style="display:flex; flex-direction:column; gap:20px;">
+                    <!-- Card Restore Data -->
+                    <div class="card glass-card" style="border-radius:14px; border:1px solid #e2e8f0; height:100%;">
+                        <div class="card-body" style="padding:22px;">
+                            <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                                <div style="width:38px; height:38px; border-radius:10px; background:linear-gradient(135deg, #2563eb, #1d4ed8); color:#fff; display:flex; align-items:center; justify-content:center; font-size:1.1rem;">
+                                    <i class="fas fa-upload"></i>
+                                </div>
+                                <div>
+                                    <h4 style="margin:0; font-size:1.1rem; color:#1e293b; font-weight:700;">2. Pulihkan Data (Restore)</h4>
+                                    <span style="font-size:0.78rem; color:#64748b;">Impor file backup JSON ke dalam database</span>
+                                </div>
+                            </div>
+
+                            <p style="font-size:0.85rem; color:#475569; line-height:1.5; margin-bottom:16px;">
+                                Unggah file cadangan <code>.json</code> yang sebelumnya Anda download. Sistem akan memvalidasi struktur data dan memberikan ringkasan sebelum proses restore dilakukan.
+                            </p>
+
+                            <!-- Drag & Drop Zone -->
+                            <div id="restore-dropzone" class="backup-dropzone mb-3">
+                                <i class="fas fa-cloud-upload-alt" style="font-size:2.2rem; color:#036F3E; margin-bottom:8px; display:block;"></i>
+                                <div style="font-weight:700; color:#1e293b; font-size:0.9rem; margin-bottom:4px;">Klik untuk memilih file backup (*.json)</div>
+                                <div style="font-size:0.78rem; color:#64748b;">atau seret file dan jatuhkan ke area ini</div>
+                                <input type="file" id="input-file-restore" accept=".json" style="display:none;">
+                            </div>
+
+                            <!-- Preview File Yang Dipilih -->
+                            <div id="restore-preview-container" style="display:none; background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:14px; margin-bottom:16px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+                                    <div>
+                                        <div id="restore-preview-filename" style="font-weight:700; font-size:0.88rem; color:#0f172a;">-</div>
+                                        <div id="restore-preview-meta" style="font-size:0.75rem; color:#64748b;">-</div>
+                                    </div>
+                                    <button type="button" id="btn-cancel-restore-file" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:0.82rem;" title="Batalkan file">
+                                        <i class="fas fa-times"></i> Hapus
+                                    </button>
+                                </div>
+
+                                <div style="font-size:0.78rem; font-weight:600; color:#475569; margin-bottom:8px;">Tabel yang ditemukan di file:</div>
+                                <div id="restore-preview-tables-list" style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:0.78rem; margin-bottom:14px;">
+                                    <!-- Diisi via JS -->
+                                </div>
+
+                                <button type="button" id="btn-start-restore" class="btn-primary" style="width:100%; padding:10px 14px; font-size:0.88rem; font-weight:700; background:#2563eb; border-color:#2563eb; display:flex; align-items:center; justify-content:center; gap:8px;">
+                                    <i class="fas fa-undo"></i> Mulai Pulihkan Data (Restore)
+                                </button>
+                            </div>
+
+                            <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 14px; font-size:0.78rem; color:#92400e; line-height:1.4;">
+                                <i class="fas fa-exclamation-triangle mr-1"></i> <strong>Keamanan:</strong> Mode pemulihan menggunakan metode <em>Upsert</em> (menambahkan data baru dan memperbarui data yang sudah ada dengan ID/NIP sama). Data lain yang tidak ada di file backup tidak akan terhapus.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card Quick Local Snapshot -->
+                    <div class="card glass-card" style="border-radius:14px; border:1px solid #e2e8f0;">
+                        <div class="card-body" style="padding:18px 22px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                                <div>
+                                    <h5 style="margin:0 0 4px; font-size:0.95rem; font-weight:700; color:#1e293b;">
+                                        <i class="fas fa-history text-secondary"></i> Snapshot Cepat Browser
+                                    </h5>
+                                    <div id="local-snapshot-info" style="font-size:0.76rem; color:#64748b;">
+                                        Belum ada snapshot lokal tersimpan.
+                                    </div>
+                                </div>
+                                <div style="display:flex; gap:8px;">
+                                    <button type="button" id="btn-create-local-snapshot" class="btn-secondary" style="padding:7px 12px; font-size:0.8rem; font-weight:600;">
+                                        <i class="fas fa-save mr-1"></i> Simpan Snapshot
+                                    </button>
+                                    <button type="button" id="btn-restore-local-snapshot" class="btn-secondary" style="padding:7px 12px; font-size:0.8rem; font-weight:600; display:none;">
+                                        <i class="fas fa-undo mr-1"></i> Pulihkan
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1265,6 +1710,149 @@
                     <i class="fas fa-trash-alt"></i> <span>Ya, Hapus</span>
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal Konfirmasi Pengesahan PKK (Single / Batch) -->
+    <div id="modal-sahkan-pkk" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; justify-content:center; align-items:center; padding:15px;">
+        <div class="card glass-card" style="width:100%; max-width:540px; padding:24px; border-radius:14px; box-shadow:0 12px 36px rgba(0,0,0,0.25);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #e2e8f0; padding-bottom:12px;">
+                <h4 style="margin:0; font-size:1.15rem; color:#036F3E; display:flex; align-items:center; gap:8px;">
+                    <i class="fas fa-stamp"></i> Konfirmasi Pengesahan PKK
+                </h4>
+                <button type="button" class="btn-close" id="btn-close-modal-sahkan" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:#64748b;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div id="modal-sahkan-target-info" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px 16px; margin-bottom:16px; font-size:0.88rem; color:#166534;">
+                <!-- Diisi via JS -->
+            </div>
+
+            <form id="form-confirm-pengesahan">
+                <div class="form-group mb-3">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:6px; display:block; color:#1e293b;">
+                        <i class="fas fa-calendar-alt text-primary"></i> Tanggal Pengesahan Dokumen *
+                    </label>
+                    <input type="date" id="input-modal-tgl-pengesahan" class="form-control" style="font-size:0.9rem; padding:8px 12px; font-weight:600;" required>
+                    <small style="color:#64748b; font-size:0.75rem; display:block; margin-top:4px;">
+                        Tanggal ini yang akan tercetak di Bagian G (GMO / GMP / Direktur) pada Dokumen Penilaian.
+                    </small>
+                </div>
+
+                <div class="form-group mb-3">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:6px; display:block; color:#1e293b;">
+                        <i class="fas fa-user-tie text-primary"></i> Pejabat Pengesah
+                    </label>
+                    <input type="text" id="input-modal-pengesah-name" class="form-control" style="font-size:0.85rem; padding:8px 12px; background:#f8fafc; font-weight:600;" readonly>
+                </div>
+
+                <div class="form-group mb-4">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:6px; display:block; color:#1e293b;">
+                        Catatan Pengesahan (Opsional)
+                    </label>
+                    <textarea id="input-modal-catatan-pengesahan" class="form-control" rows="2" placeholder="Tuliskan catatan atau rekomendasi tambahan jika ada..." style="font-size:0.85rem; padding:8px 12px;"></textarea>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button type="button" class="btn-secondary" id="btn-batal-modal-sahkan" style="padding:8px 18px; font-size:0.85rem;">Batal</button>
+                    <button type="submit" class="btn-stamp-action" id="btn-submit-modal-sahkan" style="padding:8px 20px; font-size:0.88rem;">
+                        <i class="fas fa-stamp"></i> Sahkan Dokumen
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Tambah Unit Custom Setting Pengesahan -->
+    <div id="modal-add-unit-pengesahan" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; justify-content:center; align-items:center; padding:15px;">
+        <div class="card glass-card" style="width:100%; max-width:500px; padding:24px; border-radius:14px; box-shadow:0 12px 36px rgba(0,0,0,0.25);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #e2e8f0; padding-bottom:12px;">
+                <h4 style="margin:0; font-size:1.15rem; color:#036F3E; display:flex; align-items:center; gap:8px;">
+                    <i class="fas fa-plus-circle"></i> Tambah Unit Setting Pengesahan
+                </h4>
+                <button type="button" class="btn-close" id="btn-close-modal-add-unit" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:#64748b;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <form id="form-add-unit-pengesahan">
+                <div class="form-group mb-3">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:6px; display:block;">Nama Unit Kerja *</label>
+                    <input type="text" id="input-new-unit-name" class="form-control" placeholder="Contoh: IT, SDM, Sarpras, Keuangan" required style="font-size:0.88rem; padding:8px 12px;">
+                </div>
+
+                <div class="form-group mb-3">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:6px; display:block;">Kategori Pengesah *</label>
+                    <select id="select-new-tipe-pengesah" class="form-control" style="font-size:0.88rem; padding:8px 12px;" required>
+                        <option value="GMP">GMP (General Manager Pendidikan)</option>
+                        <option value="GMO" selected>GMO (General Manager Operasional)</option>
+                        <option value="Direktur">Direktur</option>
+                        <option value="Custom">Pejabat Lainnya (Kustom)</option>
+                    </select>
+                </div>
+
+                <div class="form-group mb-4" id="form-group-custom-user" style="display:none;">
+                    <label style="font-weight:600; font-size:0.85rem; margin-bottom:6px; display:block;">Pilih Pejabat Pengesah</label>
+                    <select id="select-new-custom-user" class="form-control" style="font-size:0.88rem; padding:8px 12px;">
+                        <!-- Diisi via JS -->
+                    </select>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button type="button" class="btn-secondary" id="btn-batal-add-unit" style="padding:8px 18px; font-size:0.85rem;">Batal</button>
+                    <button type="submit" class="btn-primary" style="padding:8px 20px; font-size:0.88rem;">
+                        <i class="fas fa-check"></i> Tambahkan Unit
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Konfirmasi Restore Data -->
+    <div id="modal-confirm-restore" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; justify-content:center; align-items:center; padding:15px;">
+        <div class="card glass-card" style="width:100%; max-width:500px; padding:24px; border-radius:14px; box-shadow:0 12px 36px rgba(0,0,0,0.25);">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+                <div style="width:44px; height:44px; border-radius:50%; background:#fee2e2; color:#dc2626; display:flex; align-items:center; justify-content:center; font-size:1.4rem; flex-shrink:0;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div>
+                    <h4 style="margin:0; font-size:1.15rem; color:#991b1b; font-weight:700;">Konfirmasi Pemulihan Database</h4>
+                    <span style="font-size:0.78rem; color:#64748b;">Harap baca peringatan ini dengan teliti</span>
+                </div>
+            </div>
+
+            <div style="font-size:0.85rem; color:#334155; line-height:1.5; margin-bottom:16px;">
+                Anda akan memulihkan data dari file <strong id="modal-restore-file-title">-</strong> ke dalam database live Supabase.
+                <div id="modal-restore-summary-badges" style="margin-top:10px; padding:10px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; font-size:0.8rem;">
+                    <!-- Diisi via JS -->
+                </div>
+            </div>
+
+            <p style="font-size:0.8rem; color:#64748b; margin-bottom:20px;">
+                Operasi ini akan memperbarui (*upsert*) rekaman yang sesuai dengan kunci utama (ID / NIP). Pastikan file cadangan berasal dari sumber yang terpercaya.
+            </p>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="btn-secondary" id="btn-batal-modal-restore" style="padding:8px 18px; font-size:0.85rem;">Batal</button>
+                <button type="button" class="btn-primary" id="btn-execute-restore" style="padding:8px 20px; font-size:0.88rem; background:#dc2626; border-color:#dc2626;">
+                    <i class="fas fa-check"></i> Ya, Lanjutkan Pemulihan
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Progress Restore Data -->
+    <div id="modal-progress-restore" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:10000; justify-content:center; align-items:center; padding:15px;">
+        <div class="card glass-card" style="width:100%; max-width:440px; padding:28px; border-radius:14px; text-align:center; box-shadow:0 16px 40px rgba(0,0,0,0.3);">
+            <i class="fas fa-sync-alt fa-spin" style="font-size:2.4rem; color:#036F3E; margin-bottom:14px; display:block;"></i>
+            <h4 style="margin:0 0 6px; font-size:1.15rem; color:#1e293b; font-weight:700;">Memulihkan Data...</h4>
+            <p id="restore-progress-status" style="font-size:0.85rem; color:#64748b; margin-bottom:16px;">Menyiapkan proses pemulihan...</p>
+            
+            <div style="width:100%; height:10px; background:#e2e8f0; border-radius:6px; overflow:hidden; margin-bottom:12px;">
+                <div id="restore-progress-bar" style="width:0%; height:100%; background:linear-gradient(90deg, #036F3E, #10b981); transition:width 0.3s ease;"></div>
+            </div>
+            <div id="restore-progress-percent" style="font-size:0.8rem; font-weight:700; color:#036F3E;">0%</div>
         </div>
     </div>
 
