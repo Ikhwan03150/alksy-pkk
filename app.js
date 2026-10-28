@@ -434,20 +434,20 @@ async function fetchSupabaseAPI(action, payload = {}) {
                     pengesahJabatan: evalData.pengesahJabatan || (evalData.pengesahanData && evalData.pengesahanData.pengesahJabatan) || '',
                     pengesahanData: evalData.pengesahanData || null,
                     statusPengesahan: evalData.statusPengesahan || (evalData.tglPengesahan ? 'Disahkan' : 'Belum Disahkan'),
-                    p_kualitas_hasil_kerja: evalData.p_kualitas_hasil_kerja,
-                    p_ketepatan_waktu: evalData.p_ketepatan_waktu,
-                    p_keterampilan_kerja: evalData.p_keterampilan_kerja,
-                    p_kerjasama: evalData.p_kerjasama,
-                    p_disiplin: evalData.p_disiplin,
-                    p_inisiatif: evalData.p_inisiatif,
-                    p_peningkatan_tanggung_jawab: evalData.p_peningkatan_tanggung_jawab,
-                    p_ahlak_islami: evalData.p_ahlak_islami,
-                    p_adaptasi_terhadap_perubahan: evalData.p_adaptasi_terhadap_perubahan,
-                    m_planning_organizing: evalData.m_planning_organizing,
-                    m_controlling: evalData.m_controlling,
-                    m_analytical_thinking: evalData.m_analytical_thinking,
-                    m_decision_making: evalData.m_decision_making,
-                    m_developing_others: evalData.m_developing_others,
+                    p_kualitas_hasil_kerja: evalData.p_kualitas_hasil_kerja !== undefined && evalData.p_kualitas_hasil_kerja !== '' ? Math.round(Number(String(evalData.p_kualitas_hasil_kerja).replace(',', '.'))) : evalData.p_kualitas_hasil_kerja,
+                    p_ketepatan_waktu: evalData.p_ketepatan_waktu !== undefined && evalData.p_ketepatan_waktu !== '' ? Math.round(Number(String(evalData.p_ketepatan_waktu).replace(',', '.'))) : evalData.p_ketepatan_waktu,
+                    p_keterampilan_kerja: evalData.p_keterampilan_kerja !== undefined && evalData.p_keterampilan_kerja !== '' ? Math.round(Number(String(evalData.p_keterampilan_kerja).replace(',', '.'))) : evalData.p_keterampilan_kerja,
+                    p_kerjasama: evalData.p_kerjasama !== undefined && evalData.p_kerjasama !== '' ? Math.round(Number(String(evalData.p_kerjasama).replace(',', '.'))) : evalData.p_kerjasama,
+                    p_disiplin: evalData.p_disiplin !== undefined && evalData.p_disiplin !== '' ? Math.round(Number(String(evalData.p_disiplin).replace(',', '.'))) : evalData.p_disiplin,
+                    p_inisiatif: evalData.p_inisiatif !== undefined && evalData.p_inisiatif !== '' ? Math.round(Number(String(evalData.p_inisiatif).replace(',', '.'))) : evalData.p_inisiatif,
+                    p_peningkatan_tanggung_jawab: evalData.p_peningkatan_tanggung_jawab !== undefined && evalData.p_peningkatan_tanggung_jawab !== '' ? Math.round(Number(String(evalData.p_peningkatan_tanggung_jawab).replace(',', '.'))) : evalData.p_peningkatan_tanggung_jawab,
+                    p_ahlak_islami: evalData.p_ahlak_islami !== undefined && evalData.p_ahlak_islami !== '' ? Math.round(Number(String(evalData.p_ahlak_islami).replace(',', '.'))) : evalData.p_ahlak_islami,
+                    p_adaptasi_terhadap_perubahan: evalData.p_adaptasi_terhadap_perubahan !== undefined && evalData.p_adaptasi_terhadap_perubahan !== '' ? Math.round(Number(String(evalData.p_adaptasi_terhadap_perubahan).replace(',', '.'))) : evalData.p_adaptasi_terhadap_perubahan,
+                    m_planning_organizing: evalData.m_planning_organizing !== undefined && evalData.m_planning_organizing !== '' ? Math.round(Number(String(evalData.m_planning_organizing).replace(',', '.'))) : evalData.m_planning_organizing,
+                    m_controlling: evalData.m_controlling !== undefined && evalData.m_controlling !== '' ? Math.round(Number(String(evalData.m_controlling).replace(',', '.'))) : evalData.m_controlling,
+                    m_analytical_thinking: evalData.m_analytical_thinking !== undefined && evalData.m_analytical_thinking !== '' ? Math.round(Number(String(evalData.m_analytical_thinking).replace(',', '.'))) : evalData.m_analytical_thinking,
+                    m_decision_making: evalData.m_decision_making !== undefined && evalData.m_decision_making !== '' ? Math.round(Number(String(evalData.m_decision_making).replace(',', '.'))) : evalData.m_decision_making,
+                    m_developing_others: evalData.m_developing_others !== undefined && evalData.m_developing_others !== '' ? Math.round(Number(String(evalData.m_developing_others).replace(',', '.'))) : evalData.m_developing_others,
                     rekomendasiPerbaikan: evalData.rekomendasiPerbaikan,
                     rekomendasiAkhir: evalData.rekomendasiAkhir,
                     skiAnswers: evalData.skiAnswers,
@@ -2064,11 +2064,32 @@ async function initEvaluasiMandiri() {
 
     // Attach Event Listeners for Calculation & Scale Validation
     const attachListeners = () => {
-        const handleValInput = function(input, minVal, maxVal) {
-            let v = parseFloat(input.value);
-            if (!isNaN(v)) {
-                if (v > maxVal) input.value = maxVal;
-                else if (v < minVal && input.value !== '') input.value = minVal;
+        const preventDecimalKeys = function(e) {
+            // Blokir tombol '.', ',', 'e', 'E', '+', '-'
+            if (['.', ',', 'e', 'E', '+', '-', 'Decimal', 'Separator'].includes(e.key)) {
+                e.preventDefault();
+            }
+        };
+
+        const handleValInput = function(input, minVal, maxVal, isInteger = false) {
+            if (isInteger) {
+                let raw = String(input.value || '').replace(',', '.');
+                if (raw.includes('.')) {
+                    let num = Math.round(parseFloat(raw));
+                    input.value = (!isNaN(num) && num >= minVal && num <= maxVal) ? num : '';
+                } else if (raw !== '') {
+                    let num = parseInt(raw, 10);
+                    if (!isNaN(num)) {
+                        if (num > maxVal) input.value = maxVal;
+                        else if (num < minVal && input.value !== '') input.value = minVal;
+                    }
+                }
+            } else {
+                let v = parseFloat(input.value);
+                if (!isNaN(v)) {
+                    if (v > maxVal) input.value = maxVal;
+                    else if (v < minVal && input.value !== '') input.value = minVal;
+                }
             }
             if (input.value !== '' && !isNaN(parseFloat(input.value))) {
                 input.classList.remove('input-pkk-incomplete');
@@ -2078,15 +2099,17 @@ async function initEvaluasiMandiri() {
         };
 
         document.querySelectorAll('.input-nilai-kpi').forEach(input => {
-            input.oninput = function() { handleValInput(this, 1, 5); };
+            input.oninput = function() { handleValInput(this, 1, 5, false); };
         });
 
         document.querySelectorAll('.input-nilai-perilaku').forEach(input => {
-            input.oninput = function() { handleValInput(this, 1, 4); };
+            input.onkeydown = preventDecimalKeys;
+            input.oninput = function() { handleValInput(this, 1, 4, true); };
         });
 
         document.querySelectorAll('.input-nilai-manajerial').forEach(input => {
-            input.oninput = function() { handleValInput(this, 1, 4); };
+            input.onkeydown = preventDecimalKeys;
+            input.oninput = function() { handleValInput(this, 1, 4, true); };
         });
     };
     attachListeners();
@@ -2115,8 +2138,11 @@ async function initEvaluasiMandiri() {
         const setVal = (id, val) => {
             const el = document.querySelector(`input[data-id="${id}"]`);
             if (el) {
-                const num = parseFloat(val);
+                let num = parseFloat(String(val).replace(',', '.'));
                 if (!isNaN(num) && num >= 1) {
+                    if (el.classList.contains('input-nilai-perilaku') || el.classList.contains('input-nilai-manajerial')) {
+                        num = Math.round(num);
+                    }
                     el.value = num;
                 } else {
                     el.value = '';
@@ -2375,13 +2401,13 @@ function checkPkkFormCompletion(targetLevel) {
     perilakuFields.forEach(f => {
         const input = document.querySelector(`.input-nilai-perilaku[data-id="${f.id}"]`);
         if (!input) return;
-        const raw = (input.value || '').trim();
-        const val = parseFloat(raw);
-        if (raw === '' || isNaN(val) || val < 1 || val > 4) {
+        const raw = (input.value || '').trim().replace(',', '.');
+        const val = Number(raw);
+        if (raw === '' || isNaN(val) || val < 1 || val > 4 || !Number.isInteger(val)) {
             if (!firstInvalidEl) firstInvalidEl = input;
             missingItems.push({
                 type: 'perilaku',
-                label: `Perilaku: ${f.label} (Skala 1-4)`,
+                label: `Perilaku: ${f.label} (Skala 1-4, Bulat Tanpa Koma)`,
                 element: input
             });
         } else {
@@ -2403,13 +2429,13 @@ function checkPkkFormCompletion(targetLevel) {
         manajerialFields.forEach(f => {
             const input = document.querySelector(`.input-nilai-manajerial[data-id="${f.id}"]`);
             if (!input) return;
-            const raw = (input.value || '').trim();
-            const val = parseFloat(raw);
-            if (raw === '' || isNaN(val) || val < 1 || val > 4) {
+            const raw = (input.value || '').trim().replace(',', '.');
+            const val = Number(raw);
+            if (raw === '' || isNaN(val) || val < 1 || val > 4 || !Number.isInteger(val)) {
                 if (!firstInvalidEl) firstInvalidEl = input;
                 missingItems.push({
                     type: 'manajerial',
-                    label: `Manajerial: ${f.label} (Skala 1-4)`,
+                    label: `Manajerial: ${f.label} (Skala 1-4, Bulat Tanpa Koma)`,
                     element: input
                 });
             } else {
@@ -2646,8 +2672,8 @@ function calculatePkk() {
     const inputsPerilaku = document.querySelectorAll('.input-nilai-perilaku');
     const bbtPerIndikatorPerilaku = (bobot.perilaku || 30) / 9;
     inputsPerilaku.forEach(input => {
-        const raw = input.value.trim();
-        let val = parseFloat(raw) || 0;
+        const raw = input.value.trim().replace(',', '.');
+        let val = Math.round(parseFloat(raw)) || 0;
         if (val > 4) { val = 4; input.value = 4; }
         if (val < 0) val = 0;
         if (raw !== '') hasAnyPerilaku = true;
@@ -2661,8 +2687,8 @@ function calculatePkk() {
         const inputsManajerial = document.querySelectorAll('.input-nilai-manajerial');
         const bbtPerIndikatorManajerial = bobot.manajerial / 5;
         inputsManajerial.forEach(input => {
-            const raw = input.value.trim();
-            let val = parseFloat(raw) || 0;
+            const raw = input.value.trim().replace(',', '.');
+            let val = Math.round(parseFloat(raw)) || 0;
             if (val > 4) { val = 4; input.value = 4; }
             if (val < 0) val = 0;
             if (raw !== '') hasAnyManajerial = true;
@@ -2778,23 +2804,29 @@ async function submitPkk(status) {
         else finalGrade = "Kurang Sekali";
     }
 
-    // Collect Perilaku inputs (9 indikator)
-    const p_kualitas_hasil_kerja = parseFloat(document.querySelector('.input-nilai-perilaku[data-id="p_kualitas_hasil_kerja"]')?.value || 0);
-    const p_ketepatan_waktu = parseFloat(document.querySelector('.input-nilai-perilaku[data-id="p_ketepatan_waktu"]')?.value || 0);
-    const p_keterampilan_kerja = parseFloat(document.querySelector('.input-nilai-perilaku[data-id="p_keterampilan_kerja"]')?.value || 0);
-    const p_kerjasama = parseFloat(document.querySelector('.input-nilai-perilaku[data-id="p_kerjasama"]')?.value || 0);
-    const p_disiplin = parseFloat(document.querySelector('.input-nilai-perilaku[data-id="p_disiplin"]')?.value || 0);
-    const p_inisiatif = parseFloat(document.querySelector('.input-nilai-perilaku[data-id="p_inisiatif"]')?.value || 0);
-    const p_peningkatan_tanggung_jawab = parseFloat(document.querySelector('.input-nilai-perilaku[data-id="p_peningkatan_tanggung_jawab"]')?.value || 0);
-    const p_ahlak_islami = parseFloat(document.querySelector('.input-nilai-perilaku[data-id="p_ahlak_islami"]')?.value || 0);
-    const p_adaptasi_terhadap_perubahan = parseFloat(document.querySelector('.input-nilai-perilaku[data-id="p_adaptasi_terhadap_perubahan"]')?.value || 0);
+    // Collect Perilaku inputs (9 indikator, bilangan bulat 1-4)
+    const getRoundIntScore = (selector) => {
+        const raw = String(document.querySelector(selector)?.value || '').trim().replace(',', '.');
+        const num = Math.round(parseFloat(raw));
+        return (!isNaN(num) && num >= 1 && num <= 4) ? num : (isNaN(num) ? 0 : Math.max(1, Math.min(4, num)));
+    };
 
-    // Collect Manajerial inputs
-    const m_planning_organizing = parseFloat(document.querySelector('.input-nilai-manajerial[data-id="m_planning_organizing"]')?.value || 0);
-    const m_controlling = parseFloat(document.querySelector('.input-nilai-manajerial[data-id="m_controlling"]')?.value || 0);
-    const m_analytical_thinking = parseFloat(document.querySelector('.input-nilai-manajerial[data-id="m_analytical_thinking"]')?.value || 0);
-    const m_decision_making = parseFloat(document.querySelector('.input-nilai-manajerial[data-id="m_decision_making"]')?.value || 0);
-    const m_developing_others = parseFloat(document.querySelector('.input-nilai-manajerial[data-id="m_developing_others"]')?.value || 0);
+    const p_kualitas_hasil_kerja = getRoundIntScore('.input-nilai-perilaku[data-id="p_kualitas_hasil_kerja"]');
+    const p_ketepatan_waktu = getRoundIntScore('.input-nilai-perilaku[data-id="p_ketepatan_waktu"]');
+    const p_keterampilan_kerja = getRoundIntScore('.input-nilai-perilaku[data-id="p_keterampilan_kerja"]');
+    const p_kerjasama = getRoundIntScore('.input-nilai-perilaku[data-id="p_kerjasama"]');
+    const p_disiplin = getRoundIntScore('.input-nilai-perilaku[data-id="p_disiplin"]');
+    const p_inisiatif = getRoundIntScore('.input-nilai-perilaku[data-id="p_inisiatif"]');
+    const p_peningkatan_tanggung_jawab = getRoundIntScore('.input-nilai-perilaku[data-id="p_peningkatan_tanggung_jawab"]');
+    const p_ahlak_islami = getRoundIntScore('.input-nilai-perilaku[data-id="p_ahlak_islami"]');
+    const p_adaptasi_terhadap_perubahan = getRoundIntScore('.input-nilai-perilaku[data-id="p_adaptasi_terhadap_perubahan"]');
+
+    // Collect Manajerial inputs (5 indikator, bilangan bulat 1-4)
+    const m_planning_organizing = getRoundIntScore('.input-nilai-manajerial[data-id="m_planning_organizing"]');
+    const m_controlling = getRoundIntScore('.input-nilai-manajerial[data-id="m_controlling"]');
+    const m_analytical_thinking = getRoundIntScore('.input-nilai-manajerial[data-id="m_analytical_thinking"]');
+    const m_decision_making = getRoundIntScore('.input-nilai-manajerial[data-id="m_decision_making"]');
+    const m_developing_others = getRoundIntScore('.input-nilai-manajerial[data-id="m_developing_others"]');
 
     // Collect SKI inputs
     const skiAnswers = [];
@@ -4327,14 +4359,19 @@ async function initMonitoring() {
     const getStatusInfo = (pkk) => {
         if (!pkk) return { label: 'Belum Mengisi', cls: 'status-empty', icon: 'fas fa-circle-xmark' };
         if (pkk.status === 'Draft') return { label: 'Draft', cls: 'status-draft', icon: 'fas fa-pen' };
-        if (pkk.status === 'Menunggu Verifikasi 1') return { label: 'Menunggu Verifikasi Atasan 1', cls: 'status-pending', icon: 'fas fa-clock' };
+        if (pkk.status === 'Menunggu Verifikasi 1' || pkk.status === 'Menunggu Verifikasi Atasan 1') {
+            return { label: 'Menunggu Verifikasi 1', cls: 'status-pending', icon: 'fas fa-clock' };
+        }
+        if (pkk.status === 'Menunggu Verifikasi 2' || pkk.status === 'Menunggu Verifikasi Atasan 2') {
+            return { label: 'Menunggu Verifikasi 2', cls: 'status-pending', icon: 'fas fa-clock' };
+        }
         if (pkk.status === 'Selesai') {
             if (pkk.tglPengesahan || (pkk.pengesahanData && pkk.pengesahanData.tanggal)) {
                 return { label: 'Sudah Disahkan', cls: 'status-approved', icon: 'fas fa-stamp' };
             }
             return { label: 'Sudah Dinilai (Belum Disahkan)', cls: 'status-success', icon: 'fas fa-circle-check' };
         }
-        return { label: pkk.status, cls: 'status-pending', icon: 'fas fa-question' };
+        return { label: pkk.status, cls: 'status-pending', icon: 'fas fa-clock' };
     };
 
     monitoringMasterData = allUsers.map((u, idx) => {
@@ -4400,9 +4437,11 @@ function applyMonitoringFilter() {
     let filtered = monitoringMasterData.filter(item => {
         const matchSearch = !searchVal || item.nama.toLowerCase().includes(searchVal) || item.nip.toLowerCase().includes(searchVal);
         const matchUnit = !unitVal || item.unit.toLowerCase() === unitVal;
-        const matchStatus = !statusVal || item.statusLabel.toLowerCase() === statusVal || 
-                            (statusVal.includes('verifikasi 1') && item.statusLabel.includes('Verifikasi Atasan 1')) ||
-                            (statusVal.includes('verifikasi 2') && item.statusLabel.includes('Verifikasi Atasan 2'));
+        const itemStatus = (item.statusLabel || '').toLowerCase();
+        const matchStatus = !statusVal || 
+                            itemStatus === statusVal || 
+                            (statusVal.includes('verifikasi 1') && itemStatus.includes('verifikasi 1')) ||
+                            (statusVal.includes('verifikasi 2') && itemStatus.includes('verifikasi 2'));
         return matchSearch && matchUnit && matchStatus;
     });
 
@@ -4524,9 +4563,11 @@ function exportMonitoringToExcel() {
     let exportData = monitoringMasterData.filter(item => {
         const matchSearch = !searchVal || item.nama.toLowerCase().includes(searchVal) || item.nip.toLowerCase().includes(searchVal);
         const matchUnit = !unitVal || item.unit.toLowerCase() === unitVal;
-        const matchStatus = !statusVal || item.statusLabel.toLowerCase() === statusVal || 
-                            (statusVal.includes('verifikasi 1') && item.statusLabel.includes('Verifikasi Atasan 1')) ||
-                            (statusVal.includes('verifikasi 2') && item.statusLabel.includes('Verifikasi Atasan 2'));
+        const itemStatus = (item.statusLabel || '').toLowerCase();
+        const matchStatus = !statusVal || 
+                            itemStatus === statusVal || 
+                            (statusVal.includes('verifikasi 1') && itemStatus.includes('verifikasi 1')) ||
+                            (statusVal.includes('verifikasi 2') && itemStatus.includes('verifikasi 2'));
         return matchSearch && matchUnit && matchStatus;
     });
 
@@ -4765,26 +4806,32 @@ async function viewPKKPreview(nip) {
         skiRows = `<tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:16px;">Tidak ada data SKI</td></tr>`;
     }
 
+    const formatScore1to4 = (v) => {
+        if (v === null || v === undefined || v === '') return '-';
+        const num = Number(String(v).replace(',', '.'));
+        return isNaN(num) ? '-' : Math.round(num);
+    };
+
     const perilakuItems = [
-        ['Kualitas Hasil Kerja', pkk.p_kualitas_hasil_kerja],
-        ['Ketepatan Waktu Pengerjaan', pkk.p_ketepatan_waktu],
-        ['Keterampilan Kerja', pkk.p_keterampilan_kerja],
-        ['Kerjasama', pkk.p_kerjasama],
-        ['Disiplin', pkk.p_disiplin],
-        ['Inisiatif', pkk.p_inisiatif],
-        ['Peningkatan Tanggung Jawab', pkk.p_peningkatan_tanggung_jawab],
-        ['Akhlak Islami', pkk.p_ahlak_islami],
-        ['Adaptasi Terhadap Perubahan', pkk.p_adaptasi_terhadap_perubahan],
+        ['Kualitas Hasil Kerja', formatScore1to4(pkk.p_kualitas_hasil_kerja)],
+        ['Ketepatan Waktu Pengerjaan', formatScore1to4(pkk.p_ketepatan_waktu)],
+        ['Keterampilan Kerja', formatScore1to4(pkk.p_keterampilan_kerja)],
+        ['Kerjasama', formatScore1to4(pkk.p_kerjasama)],
+        ['Disiplin', formatScore1to4(pkk.p_disiplin)],
+        ['Inisiatif', formatScore1to4(pkk.p_inisiatif)],
+        ['Peningkatan Tanggung Jawab', formatScore1to4(pkk.p_peningkatan_tanggung_jawab)],
+        ['Akhlak Islami', formatScore1to4(pkk.p_ahlak_islami)],
+        ['Adaptasi Terhadap Perubahan', formatScore1to4(pkk.p_adaptasi_terhadap_perubahan)],
     ];
 
     const manajerialItems = [
-        ['Planning & Organizing', pkk.m_planning_organizing],
-        ['Controlling', pkk.m_controlling],
-        ['Analytical Thinking', pkk.m_analytical_thinking],
-        ['Decision Making', pkk.m_decision_making],
-        ['Developing Others', pkk.m_developing_others],
+        ['Planning & Organizing', formatScore1to4(pkk.m_planning_organizing)],
+        ['Controlling', formatScore1to4(pkk.m_controlling)],
+        ['Analytical Thinking', formatScore1to4(pkk.m_analytical_thinking)],
+        ['Decision Making', formatScore1to4(pkk.m_decision_making)],
+        ['Developing Others', formatScore1to4(pkk.m_developing_others)],
     ];
-    const hasManajerial = manajerialItems.some(([,v]) => v && v > 0);
+    const hasManajerial = manajerialItems.some(([,v]) => v && v !== '-' && Number(v) > 0);
 
     const statusColor = pkk.status === 'Selesai' ? '#16a34a' : '#d97706';
 
