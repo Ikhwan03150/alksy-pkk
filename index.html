@@ -1229,8 +1229,11 @@
                         <button class="btn-action-secondary" id="btn-refresh-user" title="Segarkan Data">
                             <i class="fas fa-sync-alt"></i> Refresh
                         </button>
+                        <button class="btn-action-excel" id="btn-download-template-user" title="Download Template Format CSV User">
+                            <i class="fas fa-file-csv" style="color:#0284c7;"></i> Download Template CSV
+                        </button>
                         <button class="btn-action-upload" id="btn-upload-csv-user" title="Upload File CSV Data User">
-                            <i class="fas fa-file-csv"></i> Upload CSV User
+                            <i class="fas fa-upload"></i> Upload CSV User
                         </button>
                         <button class="btn-action-primary" id="btn-tambah-user" title="Tambah User Baru via Form">
                             <i class="fas fa-user-plus"></i> Tambah User Baru
@@ -1622,13 +1625,18 @@
                 <button class="btn-close" id="btn-close-modal-csv-user" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:#64748b;"><i class="fas fa-times"></i></button>
             </div>
             
-            <div style="background:#eff6ff; border:1px solid #bfdbfe; padding:12px; border-radius:8px; margin-bottom:16px; font-size:0.85rem; color:#1e40af;">
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; padding:12px 14px; border-radius:8px; margin-bottom:16px; font-size:0.85rem; color:#1e40af;">
                 <p style="margin:0 0 6px; font-weight:600;"><i class="fas fa-info-circle"></i> Petunjuk Import CSV User:</p>
-                <ul style="margin:0; padding-left:20px;">
-                    <li>Buka Sheet <strong>Users</strong> di Google Spreadsheet Anda > Klik <strong>File > Download > .csv</strong>.</li>
-                    <li>Pastikan baris pertama (header) berisi: <code>NIP, Password, Nama, Level, Jabatan, Unit, AtasanNIP1 (Atasan1), AtasanNIP2 (Atasan2)</code></li>
+                <ul style="margin:0 0 10px; padding-left:20px; line-height:1.5;">
+                    <li>Unduh template CSV yang telah disesuaikan melalui tombol di bawah ini.</li>
+                    <li>Pastikan baris pertama (header) berisi: <code>NIP, Password, Nama, Level, Jabatan, Unit, Atasan1, Atasan2</code></li>
                     <li>NIP yang sudah ada di database akan diperbarui (*upsert*).</li>
                 </ul>
+                <div>
+                    <button type="button" class="btn-action-excel" id="btn-modal-download-template-user" style="background:#ffffff; color:#0284c7; border:1px solid #0284c7; padding:6px 14px; font-size:0.8rem; border-radius:6px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                        <i class="fas fa-download"></i> Download Template Format CSV User
+                    </button>
+                </div>
             </div>
 
             <div class="form-group mb-4">

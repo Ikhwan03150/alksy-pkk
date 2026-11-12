@@ -1109,9 +1109,13 @@ select.form-control { appearance: auto; }
         display: none !important;
     }
 
-    tr, .page-break-avoid {
+    tr, .page-break-avoid, .pdf-avoid-break {
         page-break-inside: avoid !important;
         break-inside: avoid !important;
+    }
+    .pdf-page-break {
+        page-break-before: always !important;
+        break-before: page !important;
     }
 }
 

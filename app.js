@@ -4878,24 +4878,24 @@ async function viewPKKPreview(nip) {
         </div>
 
         <!-- Container Aspek B & C Compact Layout -->
-        <div style="display:grid; grid-template-columns:${hasManajerial ? '1fr 1fr' : '1fr'}; gap:20px; margin-bottom:24px;">
+        <div class="pdf-avoid-break" style="display:grid; grid-template-columns:${hasManajerial ? '1fr 1fr' : '1fr'}; gap:16px; margin-bottom:20px; page-break-inside:avoid; break-inside:avoid;">
             <!-- Aspek B: Perilaku -->
             <div>
-                <div style="font-weight:700; color:#1e293b; font-size:0.9rem; padding:6px 12px; background:#1e293b; color:white; border-radius:4px 4px 0 0; letter-spacing:0.5px;">
+                <div style="font-weight:700; color:#1e293b; font-size:0.88rem; padding:6px 12px; background:#1e293b; color:white; border-radius:4px 4px 0 0; letter-spacing:0.5px;">
                     B. PENILAIAN ASPEK PERILAKU
                 </div>
-                <table style="width:100%; border-collapse:collapse; border:1px solid #cbd5e1; font-size:0.85rem;">
+                <table style="width:100%; border-collapse:collapse; border:1px solid #cbd5e1; font-size:0.82rem;">
                     <thead>
                         <tr style="background:#f1f5f9; color:#1e293b;">
-                            <th style="padding:8px 12px; text-align:left; border:1px solid #cbd5e1;">Indikator</th>
-                            <th style="padding:8px 12px; text-align:center; width:100px; white-space:nowrap; border:1px solid #cbd5e1;">Nilai (1-4)</th>
+                            <th style="padding:6px 10px; text-align:left; border:1px solid #cbd5e1;">Indikator</th>
+                            <th style="padding:6px 10px; text-align:center; width:85px; white-space:nowrap; border:1px solid #cbd5e1;">Nilai (1-4)</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${perilakuItems.map(([label, val], idx) => `
                             <tr style="border-bottom:1px solid #e2e8f0; background:${idx % 2 === 0 ? '#fff' : '#fafafa'};">
-                                <td style="padding:7px 12px; border-right:1px solid #cbd5e1;">${label}</td>
-                                <td style="padding:7px 12px; text-align:center; font-weight:700; color:#16a34a;">${val || '-'}</td>
+                                <td style="padding:6px 10px; border-right:1px solid #cbd5e1;">${label}</td>
+                                <td style="padding:6px 10px; text-align:center; font-weight:700; color:#16a34a;">${val || '-'}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -4905,21 +4905,21 @@ async function viewPKKPreview(nip) {
             ${hasManajerial ? `
             <!-- Aspek C: Manajerial -->
             <div>
-                <div style="font-weight:700; color:#1e293b; font-size:0.9rem; padding:6px 12px; background:#1e293b; color:white; border-radius:4px 4px 0 0; letter-spacing:0.5px;">
+                <div style="font-weight:700; color:#1e293b; font-size:0.88rem; padding:6px 12px; background:#1e293b; color:white; border-radius:4px 4px 0 0; letter-spacing:0.5px;">
                     C. PENILAIAN ASPEK MANAJERIAL
                 </div>
-                <table style="width:100%; border-collapse:collapse; border:1px solid #cbd5e1; font-size:0.85rem;">
+                <table style="width:100%; border-collapse:collapse; border:1px solid #cbd5e1; font-size:0.82rem;">
                     <thead>
                         <tr style="background:#f1f5f9; color:#1e293b;">
-                            <th style="padding:8px 12px; text-align:left; border:1px solid #cbd5e1;">Indikator</th>
-                            <th style="padding:8px 12px; text-align:center; width:100px; white-space:nowrap; border:1px solid #cbd5e1;">Nilai (1-4)</th>
+                            <th style="padding:6px 10px; text-align:left; border:1px solid #cbd5e1;">Indikator</th>
+                            <th style="padding:6px 10px; text-align:center; width:85px; white-space:nowrap; border:1px solid #cbd5e1;">Nilai (1-4)</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${manajerialItems.map(([label, val], idx) => `
                             <tr style="border-bottom:1px solid #e2e8f0; background:${idx % 2 === 0 ? '#fff' : '#fafafa'};">
-                                <td style="padding:7px 12px; border-right:1px solid #cbd5e1;">${label}</td>
-                                <td style="padding:7px 12px; text-align:center; font-weight:700; color:#16a34a;">${val || '-'}</td>
+                                <td style="padding:6px 10px; border-right:1px solid #cbd5e1;">${label}</td>
+                                <td style="padding:6px 10px; text-align:center; font-weight:700; color:#16a34a;">${val || '-'}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -4927,89 +4927,92 @@ async function viewPKKPreview(nip) {
             </div>` : ''}
         </div>
 
-        ${(pkk.rekomendasiPerbaikan || pkk.rekomendasiAkhir) ? `
-        <!-- Aspek D: Rekomendasi Compact Layout -->
-        <div style="margin-bottom:24px;">
-            <div style="font-weight:700; color:white; font-size:0.9rem; padding:6px 12px; background:#4f46e5; border-radius:4px 4px 0 0; letter-spacing:0.5px;">
-                D. REKOMENDASI PERBAIKAN &amp; KEPUTUSAN AKHIR
-            </div>
-            <div style="border:1px solid #cbd5e1; border-top:none; padding:14px; background:#f8fafc; border-radius:0 0 4px 4px;">
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; font-size:0.85rem;">
-                    <div style="background:white; padding:12px; border-radius:6px; border:1px solid #e2e8f0;">
-                        <div style="font-weight:700; color:#4338ca; margin-bottom:4px; font-size:0.8rem; text-transform:uppercase;">JENIS PERBAIKAN</div>
-                        <div style="font-weight:600; color:#1e293b; margin-bottom:6px;">${pkk.rekomendasiPerbaikan || '-'}</div>
-                        <div style="color:#64748b; font-size:0.8rem;"><strong style="color:#475569;">Keterangan:</strong> ${pkk.keteranganPerbaikan || '-'}</div>
-                    </div>
-                    <div style="background:white; padding:12px; border-radius:6px; border:1px solid #e2e8f0;">
-                        <div style="font-weight:700; color:#4338ca; margin-bottom:4px; font-size:0.8rem; text-transform:uppercase;">KEPUTUSAN AKHIR</div>
-                        <div style="font-weight:600; color:#1e293b; margin-bottom:6px;">${pkk.rekomendasiAkhir || '-'}</div>
-                        <div style="color:#64748b; font-size:0.8rem;"><strong style="color:#475569;">Alasan:</strong> ${pkk.alasanKeputusan || '-'}</div>
+        <!-- Section Penutup (D, Skor Akhir, G, Rating Scale) dalam satu blok avoid-break -->
+        <div class="pdf-avoid-break" style="page-break-inside:avoid; break-inside:avoid; margin-top:20px;">
+            ${(pkk.rekomendasiPerbaikan || pkk.rekomendasiAkhir) ? `
+            <!-- Aspek D: Rekomendasi Compact Layout -->
+            <div style="margin-bottom:18px;">
+                <div style="font-weight:700; color:white; font-size:0.88rem; padding:6px 12px; background:#4f46e5; border-radius:4px 4px 0 0; letter-spacing:0.5px;">
+                    D. REKOMENDASI PERBAIKAN &amp; KEPUTUSAN AKHIR
+                </div>
+                <div style="border:1px solid #cbd5e1; border-top:none; padding:12px; background:#f8fafc; border-radius:0 0 4px 4px;">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; font-size:0.82rem;">
+                        <div style="background:white; padding:10px 12px; border-radius:6px; border:1px solid #e2e8f0;">
+                            <div style="font-weight:700; color:#4338ca; margin-bottom:4px; font-size:0.75rem; text-transform:uppercase;">JENIS PERBAIKAN</div>
+                            <div style="font-weight:600; color:#1e293b; margin-bottom:4px;">${pkk.rekomendasiPerbaikan || '-'}</div>
+                            <div style="color:#64748b; font-size:0.78rem;"><strong style="color:#475569;">Keterangan:</strong> ${pkk.keteranganPerbaikan || '-'}</div>
+                        </div>
+                        <div style="background:white; padding:10px 12px; border-radius:6px; border:1px solid #e2e8f0;">
+                            <div style="font-weight:700; color:#4338ca; margin-bottom:4px; font-size:0.75rem; text-transform:uppercase;">KEPUTUSAN AKHIR</div>
+                            <div style="font-weight:600; color:#1e293b; margin-bottom:4px;">${pkk.rekomendasiAkhir || '-'}</div>
+                            <div style="color:#64748b; font-size:0.78rem;"><strong style="color:#475569;">Alasan:</strong> ${pkk.alasanKeputusan || '-'}</div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>` : ''}
+            </div>` : ''}
 
-        <!-- Ringkasan Hasil Akhir -->
-        <div style="background: linear-gradient(135deg,#1e293b,#334155); color:white; border-radius:8px; padding:16px 24px; display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-            <div>
-                <div style="font-size:0.8rem; text-transform:uppercase; letter-spacing:1px; opacity:0.8;">SKOR AKHIR PENILAIAN KINERJA</div>
-                <div style="font-size:1.1rem; font-weight:600; opacity:0.9;">Kategori: <strong style="color:#4ade80;">${pkk.finalGrade || '-'}</strong></div>
+            <!-- Ringkasan Hasil Akhir -->
+            <div style="background: linear-gradient(135deg,#1e293b,#334155); color:white; border-radius:8px; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+                <div>
+                    <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:1px; opacity:0.8;">SKOR AKHIR PENILAIAN KINERJA</div>
+                    <div style="font-size:1rem; font-weight:600; opacity:0.9;">Kategori: <strong style="color:#4ade80;">${pkk.finalGrade || '-'}</strong></div>
+                </div>
+                <div style="font-size:2.2rem; font-weight:800; color:#4ade80; white-space:nowrap;">${pkk.finalScore || 0}</div>
             </div>
-            <div style="font-size:2.4rem; font-weight:800; color:#4ade80;">${pkk.finalScore || 0}</div>
-        </div>
 
-        <!-- Section G: Pengesahan (4 Tanda Tangan) -->
-        <div style="margin-top:28px; page-break-inside:avoid;">
-            <div style="font-weight:700; color:white; font-size:0.88rem; padding:6px 12px; background:#036F3E; border-radius:4px 4px 0 0; letter-spacing:0.5px;">
-                G. PENGESAHAN DOKUMEN PENILAIAN
+            <!-- Section G: Pengesahan (4 Tanda Tangan) -->
+            <div style="margin-top:18px;">
+                <div style="font-weight:700; color:white; font-size:0.85rem; padding:6px 12px; background:#036F3E; border-radius:4px 4px 0 0; letter-spacing:0.5px;">
+                    G. PENGESAHAN DOKUMEN PENILAIAN
+                </div>
+                <table style="width:100%; border-collapse:collapse; border:1.5px solid #1e293b; text-align:center; font-size:0.8rem;">
+                    <thead>
+                        <tr style="border-bottom:1.5px solid #1e293b; background:#f8fafc; font-weight:700; color:#1e293b;">
+                            <th style="padding:7px 4px; border-right:1.5px solid #1e293b; width:25%;">Yang mengajukan</th>
+                            <th style="padding:7px 4px; border-right:1.5px solid #1e293b; width:25%;">Penilai (Atasan 1)</th>
+                            <th style="padding:7px 4px; border-right:1.5px solid #1e293b; width:25%;">Penilai (Atasan 2)</th>
+                            <th style="padding:7px 4px; width:25%;">${pengesahColTitle}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="height:88px; vertical-align:bottom;">
+                            <td style="border-right:1.5px solid #1e293b; padding-bottom:6px;">
+                                <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${pkk.nama}</div>
+                                <div style="font-size:0.72rem; color:#64748b;">NIP: ${pkk.nip}</div>
+                            </td>
+                            <td style="border-right:1.5px solid #1e293b; padding-bottom:6px;">
+                                <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${atasan1Name}</div>
+                                <div style="font-size:0.72rem; color:#64748b;">${atasan1Nip && atasan1Nip !== '-' && atasan1Nip !== '0' && atasan1Nip.toLowerCase() !== 'null' ? 'NIP: ' + atasan1Nip : ''}</div>
+                            </td>
+                            <td style="border-right:1.5px solid #1e293b; padding-bottom:6px;">
+                                <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${atasan2Name}</div>
+                                <div style="font-size:0.72rem; color:#64748b;">${atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Nip.toLowerCase() !== 'null' ? 'NIP: ' + atasan2Nip : ''}</div>
+                            </td>
+                            <td style="padding-bottom:6px;">
+                                <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${gmName}</div>
+                                <div style="font-size:0.72rem; color:#64748b;">${gmNip ? 'NIP: ' + gmNip : ''}</div>
+                            </td>
+                        </tr>
+                        <tr style="border-top:1.5px solid #1e293b; font-size:0.75rem; color:#334155;">
+                            <td style="padding:4px; border-right:1.5px solid #1e293b;">${formatSigDate(tglPengajuan)}</td>
+                            <td style="padding:4px; border-right:1.5px solid #1e293b;">${formatSigDate(tglVerif1)}</td>
+                            <td style="padding:4px; border-right:1.5px solid #1e293b;">${(atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Name !== '-') ? formatSigDate(tglVerif2) : '-'}</td>
+                            <td style="padding:4px;">${formatSigDate(tglPengesahan)}</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
-            <table style="width:100%; border-collapse:collapse; border:1.5px solid #1e293b; text-align:center; font-size:0.82rem;">
-                <thead>
-                    <tr style="border-bottom:1.5px solid #1e293b; background:#f8fafc; font-weight:700; color:#1e293b;">
-                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:25%;">Yang mengajukan</th>
-                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:25%;">Penilai (Atasan 1)</th>
-                        <th style="padding:8px 4px; border-right:1.5px solid #1e293b; width:25%;">Penilai (Atasan 2)</th>
-                        <th style="padding:8px 4px; width:25%;">${pengesahColTitle}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr style="height:95px; vertical-align:bottom;">
-                        <td style="border-right:1.5px solid #1e293b; padding-bottom:8px;">
-                            <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${pkk.nama}</div>
-                            <div style="font-size:0.75rem; color:#64748b;">NIP: ${pkk.nip}</div>
-                        </td>
-                        <td style="border-right:1.5px solid #1e293b; padding-bottom:8px;">
-                            <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${atasan1Name}</div>
-                            <div style="font-size:0.75rem; color:#64748b;">${atasan1Nip && atasan1Nip !== '-' && atasan1Nip !== '0' && atasan1Nip.toLowerCase() !== 'null' ? 'NIP: ' + atasan1Nip : ''}</div>
-                        </td>
-                        <td style="border-right:1.5px solid #1e293b; padding-bottom:8px;">
-                            <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${atasan2Name}</div>
-                            <div style="font-size:0.75rem; color:#64748b;">${atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Nip.toLowerCase() !== 'null' ? 'NIP: ' + atasan2Nip : ''}</div>
-                        </td>
-                        <td style="padding-bottom:8px;">
-                            <div style="font-weight:700; color:#1e293b; text-decoration:underline;">${gmName}</div>
-                            <div style="font-size:0.75rem; color:#64748b;">${gmNip ? 'NIP: ' + gmNip : ''}</div>
-                        </td>
-                    </tr>
-                    <tr style="border-top:1.5px solid #1e293b; font-size:0.78rem; color:#334155;">
-                        <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">${formatSigDate(tglPengajuan)}</td>
-                        <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">${formatSigDate(tglVerif1)}</td>
-                        <td style="padding:5px 4px; border-right:1.5px solid #1e293b;">${(atasan2Nip && atasan2Nip !== '-' && atasan2Nip !== '0' && atasan2Name !== '-') ? formatSigDate(tglVerif2) : '-'}</td>
-                        <td style="padding:5px 4px;">${formatSigDate(tglPengesahan)}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
 
-        <!-- Rating Scale Info Box -->
-        <div style="margin-top:20px; font-size:0.82rem; color:#1e293b; line-height:1.5; page-break-inside:avoid;">
-            <div style="font-weight:700; text-decoration:underline; margin-bottom:6px;">Rating Scale (Nilai Kategori) :</div>
-            <div style="display:flex; flex-wrap:wrap; gap:10px 24px; font-size:0.82rem; color:#334155; background:#f8fafc; padding:8px 14px; border-radius:6px; border:1px solid #cbd5e1;">
-                <div><span>&lt; 168</span> : <strong style="color:#1e293b;">Kurang Sekali</strong></div>
-                <div><span>168 - 239</span> : <strong style="color:#1e293b;">Kurang</strong></div>
-                <div><span>240 - 311</span> : <strong style="color:#1e293b;">Cukup</strong></div>
-                <div><span>312 - 383</span> : <strong style="color:#1e293b;">Baik</strong></div>
-                <div><span>384 - 455</span> : <strong style="color:#1e293b;">Baik Sekali</strong></div>
+            <!-- Rating Scale Info Box -->
+            <div style="margin-top:16px; font-size:0.78rem; color:#1e293b; line-height:1.4;">
+                <div style="font-weight:700; text-decoration:underline; margin-bottom:4px;">Rating Scale (Nilai Kategori) :</div>
+                <div style="display:flex; flex-wrap:wrap; gap:8px 16px; font-size:0.78rem; color:#334155; background:#f8fafc; padding:6px 12px; border-radius:6px; border:1px solid #cbd5e1;">
+                    <div><span>&lt; 168</span> : <strong style="color:#1e293b;">Kurang Sekali</strong></div>
+                    <div><span>168 - 239</span> : <strong style="color:#1e293b;">Kurang</strong></div>
+                    <div><span>240 - 311</span> : <strong style="color:#1e293b;">Cukup</strong></div>
+                    <div><span>312 - 383</span> : <strong style="color:#1e293b;">Baik</strong></div>
+                    <div><span>384 - 455</span> : <strong style="color:#1e293b;">Baik Sekali</strong></div>
+                </div>
             </div>
         </div>
 
@@ -5089,35 +5092,60 @@ window.downloadPKKPDF = async function(namaKaryawan, tahunAjaran) {
         btn.disabled = true;
     }
 
+    // Buat container wrapper di luar layar yang terpasang di DOM agar ukuran dan font terhitung 100% presisi
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'fixed';
+    wrapper.style.left = '-9999px';
+    wrapper.style.top = '0';
+    wrapper.style.width = '680px';
+    wrapper.style.background = '#ffffff';
+    wrapper.style.zIndex = '-9999';
+
+    const clone = content.cloneNode(true);
+    // Hapus tombol aksi dan badge status yang berkelas .no-print
+    clone.querySelectorAll('.no-print').forEach(el => el.remove());
+
+    // Beri styling A4 proporsional pada clone (680px muat sempurna dalam margin 8mm A4 tanpa terpotong di kanan)
+    clone.style.width = '680px';
+    clone.style.padding = '0';
+    clone.style.margin = '0 auto';
+    clone.style.background = '#ffffff';
+    clone.style.boxSizing = 'border-box';
+    clone.style.fontFamily = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+
+    // Pastikan seluruh tabel dan box berukuran 100% dan tidak meluap
+    clone.querySelectorAll('table').forEach(tbl => {
+        tbl.style.width = '100%';
+        tbl.style.boxSizing = 'border-box';
+    });
+
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+
+    const safeNama = (namaKaryawan || 'Karyawan').replace(/[^a-zA-Z0-9_\-\s]/g, '').trim().replace(/\s+/g, '_');
+    const safeTA = (tahunAjaran || '').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const filename = `PKK_${safeNama}${safeTA ? '_' + safeTA : ''}.pdf`;
+
+    const opt = {
+        margin: [8, 8, 8, 8], // 8mm margin sekeliling kertas A4
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+            scale: 2,
+            useCORS: true,
+            letterRendering: true,
+            scrollY: 0,
+            scrollX: 0,
+            windowWidth: 720
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { 
+            mode: ['css', 'legacy'],
+            avoid: ['.pdf-avoid-break', 'table', 'tr', '.rating-scale-box']
+        }
+    };
+
     try {
-        const clone = content.cloneNode(true);
-        // Hapus elemen navigasi / tombol aksi dari PDF
-        clone.querySelectorAll('.no-print').forEach(el => el.remove());
-
-        const safeNama = (namaKaryawan || 'Karyawan').replace(/[^a-zA-Z0-9_\-\s]/g, '').trim().replace(/\s+/g, '_');
-        const safeTA = (tahunAjaran || '').replace(/[^a-zA-Z0-9_\-]/g, '_');
-        const filename = `PKK_${safeNama}${safeTA ? '_' + safeTA : ''}.pdf`;
-
-        // Atur dimensi tampilan clone dokumen
-        clone.style.width = '794px';
-        clone.style.padding = '24px';
-        clone.style.background = '#ffffff';
-        clone.style.boxSizing = 'border-box';
-
-        const opt = {
-            margin: [8, 10, 8, 10],
-            filename: filename,
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: {
-                scale: 2,
-                useCORS: true,
-                letterRendering: true,
-                scrollY: 0
-            },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-        };
-
         await html2pdf().set(opt).from(clone).save();
         showToast("File PDF PKK berhasil diunduh!", "success");
     } catch (err) {
@@ -5125,6 +5153,7 @@ window.downloadPKKPDF = async function(namaKaryawan, tahunAjaran) {
         showToast("Gagal mengunduh PDF secara langsung. Membuka dialog cetak...", "warning");
         window.printPKKPreview();
     } finally {
+        wrapper.remove();
         if (btn) {
             btn.innerHTML = origHtml;
             btn.disabled = false;
@@ -7455,6 +7484,11 @@ async function initManajemenUser(forceRefresh = false) {
         btnTambah.onclick = () => openUserFormModal();
     }
 
+    const btnDownloadTemplateUser = document.getElementById('btn-download-template-user');
+    if (btnDownloadTemplateUser) {
+        btnDownloadTemplateUser.onclick = () => downloadTemplateUserCSV();
+    }
+
     const btnUploadCsv = document.getElementById('btn-upload-csv-user');
     if (btnUploadCsv) {
         btnUploadCsv.onclick = () => openCsvUserUploadModal();
@@ -7720,15 +7754,46 @@ function closeCsvUserUploadModal() {
     if (modal) modal.style.display = 'none';
 }
 
+function downloadTemplateUserCSV() {
+    const csvContent = 
+`NIP,Password,Nama,Level,Jabatan,Unit,Atasan1,Atasan2
+1001,123,"Super Admin",Super Admin,Administrator,Pusat,,
+0884.0710.00,123,"Dina Fitriani, S.Pt",General Manager,GM Operasional,Direksi,,
+0489.0226.00,123,"Asep Ihsanudin, M.Pd.",General Manager,GM Pendidikan,Direksi,,
+0492.1116.00,123,"Ratna Sari Dewi, S.H",Manager,Manager HRD,HRD,0884.0710.00,
+0891.0625.04,123,"Ervan Jaya, M.Pd",Manager,Kepala Sekolah SMA,SMA,0489.0226.00,
+0678.0708.03,123,"Siti Umroh, M.Pd",Manager,Kepala Sekolah SMP,SMP,0489.0226.00,
+0978.1001.01,123,"Haryati, M.M",Manager,Kepala Sekolah TK,TK,0489.0226.00,
+1194.0121.00,123,"Muhamad Fahmi, S.Akun",Manager,Manager FA,FA,0884.0710.00,
+0371.0717.00,123,"Budi Santoso, SP",Manager,Manager QMS,QMS,0885.0220.00,
+0884.0207.02,123,"Mamay Mayangsari, S.Psi",Staff,Guru BK SMA,SMA,0891.0625.04,0489.0226.00
+0577.0705.02,123,"Lailya Hasmy, S.Pd",Supervisor,Wakasek Kurikulum SMA,SMA,0891.0625.04,0489.0226.00
+0384.1107.00,123,"Ade Kurniawan",Pelaksana,CSO,GA,0884.0710.00,`;
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "Template_User_AlSyukro.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast("Template CSV User berhasil di-download!", "success");
+}
+window.downloadTemplateUserCSV = downloadTemplateUserCSV;
+
 function setupCsvUserModalEvents() {
     const fileInput = document.getElementById('file-input-csv-user');
     const previewArea = document.getElementById('csv-user-preview-area');
     const btnProses = document.getElementById('btn-proses-csv-user');
     const btnClose = document.getElementById('btn-close-modal-csv-user');
     const btnBatal = document.getElementById('btn-batal-csv-user');
+    const btnModalDownloadTemplate = document.getElementById('btn-modal-download-template-user');
 
     if (btnClose) btnClose.onclick = closeCsvUserUploadModal;
     if (btnBatal) btnBatal.onclick = closeCsvUserUploadModal;
+    if (btnModalDownloadTemplate) btnModalDownloadTemplate.onclick = () => downloadTemplateUserCSV();
 
     if (fileInput) {
         fileInput.onchange = (e) => {
