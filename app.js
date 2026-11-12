@@ -5015,15 +5015,18 @@ async function viewPKKPreview(nip) {
 
         <!-- Print Action Buttons -->
         <div style="text-align:center; margin-top:24px; display:flex; justify-content:center; gap:12px; flex-wrap:wrap;" class="no-print">
-            <button onclick="window.print()" style="background:#036F3E; color:white; border:none; border-radius:8px; padding:10px 28px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); transition:all 0.2s;">
-                <i class="fas fa-print"></i> Cetak / Save PDF
+            <button type="button" onclick="window.printPKKPreview()" style="background:#036F3E; color:white; border:none; border-radius:8px; padding:10px 24px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); display:inline-flex; align-items:center; gap:8px; transition:all 0.2s;">
+                <i class="fas fa-print"></i> Cetak Dokumen
+            </button>
+            <button type="button" id="btn-download-pdf-pkk" onclick="window.downloadPKKPDF('${(userInfo.nama || pkk.nama || '').replace(/'/g, "\\'")}', '${pkk.tahunAjaran || ''}')" style="background:#2563eb; color:white; border:none; border-radius:8px; padding:10px 24px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(37,99,235,0.2); display:inline-flex; align-items:center; gap:8px; transition:all 0.2s;">
+                <i class="fas fa-file-pdf"></i> Unduh / Save PDF
             </button>
             ${(currentUser && (currentUser.level === 'Super Admin' || currentUser.nip === '1001')) ? `
-            <button onclick="deletePKKFromPreview('${nip}', '${pkk.id || ''}', '${(userInfo.nama || pkk.nama || '').replace(/'/g, "\\'")}')" style="background:#ef4444; color:white; border:none; border-radius:8px; padding:10px 24px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(239,68,68,0.2); transition:all 0.2s;">
+            <button type="button" onclick="deletePKKFromPreview('${nip}', '${pkk.id || ''}', '${(userInfo.nama || pkk.nama || '').replace(/'/g, "\\'")}')" style="background:#ef4444; color:white; border:none; border-radius:8px; padding:10px 20px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(239,68,68,0.2); display:inline-flex; align-items:center; gap:8px; transition:all 0.2s;">
                 <i class="fas fa-trash"></i> Hapus PKK
             </button>
             ` : ''}
-            <button onclick="closePreviewPKK()" style="background:#64748b; color:white; border:none; border-radius:8px; padding:10px 24px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+            <button type="button" onclick="closePreviewPKK()" style="background:#64748b; color:white; border:none; border-radius:8px; padding:10px 20px; font-size:0.9rem; cursor:pointer; font-family:inherit; font-weight:600; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); display:inline-flex; align-items:center; gap:8px;">
                 <i class="fas fa-times"></i> Tutup
             </button>
         </div>
@@ -5040,6 +5043,93 @@ window.closePreviewPKK = function() {
     if (modal) modal.style.display = 'none';
     document.body.style.overflow = '';
     _previewUsersCache = null;
+};
+
+window.printPKKPreview = function() {
+    const modal = document.getElementById('modal-pkk-preview');
+    const prevScrollTop = modal ? modal.scrollTop : 0;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+
+    // Reset overflow agar browser dapat mencetak seluruh halaman tanpa terpotong
+    document.body.style.overflow = 'visible';
+    document.documentElement.style.overflow = 'visible';
+
+    setTimeout(() => {
+        try {
+            window.print();
+        } catch (err) {
+            console.error("Gagal memanggil window.print:", err);
+            showToast("Gagal memicu pencetakan: " + err.message, "error");
+        } finally {
+            setTimeout(() => {
+                document.body.style.overflow = prevBodyOverflow || 'hidden';
+                document.documentElement.style.overflow = prevHtmlOverflow || '';
+                if (modal) modal.scrollTop = prevScrollTop;
+            }, 500);
+        }
+    }, 150);
+};
+
+window.downloadPKKPDF = async function(namaKaryawan, tahunAjaran) {
+    const content = document.getElementById('modal-pkk-preview-content');
+    if (!content) return;
+
+    if (typeof html2pdf === 'undefined') {
+        showToast("Pustaka PDF sedang dimuat atau luring. Mengalihkan ke dialog cetak browser...", "info");
+        window.printPKKPreview();
+        return;
+    }
+
+    const btn = document.getElementById('btn-download-pdf-pkk');
+    let origHtml = '';
+    if (btn) {
+        origHtml = btn.innerHTML;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Menyiapkan PDF...`;
+        btn.disabled = true;
+    }
+
+    try {
+        const clone = content.cloneNode(true);
+        // Hapus elemen navigasi / tombol aksi dari PDF
+        clone.querySelectorAll('.no-print').forEach(el => el.remove());
+
+        const safeNama = (namaKaryawan || 'Karyawan').replace(/[^a-zA-Z0-9_\-\s]/g, '').trim().replace(/\s+/g, '_');
+        const safeTA = (tahunAjaran || '').replace(/[^a-zA-Z0-9_\-]/g, '_');
+        const filename = `PKK_${safeNama}${safeTA ? '_' + safeTA : ''}.pdf`;
+
+        // Atur dimensi tampilan clone dokumen
+        clone.style.width = '794px';
+        clone.style.padding = '24px';
+        clone.style.background = '#ffffff';
+        clone.style.boxSizing = 'border-box';
+
+        const opt = {
+            margin: [8, 10, 8, 10],
+            filename: filename,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: {
+                scale: 2,
+                useCORS: true,
+                letterRendering: true,
+                scrollY: 0
+            },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        };
+
+        await html2pdf().set(opt).from(clone).save();
+        showToast("File PDF PKK berhasil diunduh!", "success");
+    } catch (err) {
+        console.error("Gagal membuat PDF:", err);
+        showToast("Gagal mengunduh PDF secara langsung. Membuka dialog cetak...", "warning");
+        window.printPKKPreview();
+    } finally {
+        if (btn) {
+            btn.innerHTML = origHtml;
+            btn.disabled = false;
+        }
+    }
 };
 
 

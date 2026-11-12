@@ -1063,11 +1063,19 @@ select.form-control { appearance: auto; }
         color-adjust: exact !important;
     }
 
-    body {
+    html, body {
+        overflow: visible !important;
+        height: auto !important;
+        min-height: 100% !important;
         background: #ffffff !important;
         background-image: none !important;
         margin: 0 !important;
         padding: 0 !important;
+    }
+
+    @page {
+        size: A4 portrait;
+        margin: 10mm 12mm;
     }
 
     body > *:not(#modal-pkk-preview) {
@@ -1088,6 +1096,7 @@ select.form-control { appearance: auto; }
 
     #modal-pkk-preview > div {
         max-width: 100% !important;
+        width: 100% !important;
         box-shadow: none !important;
         padding: 0 !important;
         margin: 0 !important;
@@ -1098,6 +1107,11 @@ select.form-control { appearance: auto; }
 
     .no-print {
         display: none !important;
+    }
+
+    tr, .page-break-avoid {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
     }
 }
 
